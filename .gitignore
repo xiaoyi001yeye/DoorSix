@@ -1,0 +1,25 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub/
+build/
+pubspec.lock
+
+# Generated platform folders; CI can create Android for release builds.
+android/
+ios/
+linux/
+macos/
+web/
+windows/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+
+# Logs
+*.log

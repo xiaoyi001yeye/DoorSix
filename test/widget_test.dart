@@ -1,0 +1,13 @@
+import 'package:door_six/main.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('DoorSix home renders primary actions', (tester) async {
+    await tester.pumpWidget(const DoorSixApp());
+
+    expect(find.text('砸六家'), findsOneWidget);
+    expect(find.text('快速开始'), findsOneWidget);
+    expect(find.text('练习桌'), findsOneWidget);
+    expect(find.text('天津六人两队扑克'), findsOneWidget);
+  });
+}

@@ -38,7 +38,7 @@ class HandCard extends StatelessWidget {
           boxShadow: [
             if (card.selected)
               BoxShadow(
-                color: AppTheme.teamGold.withOpacity(0.35),
+                color: AppTheme.teamGold.withValues(alpha: 0.35),
                 blurRadius: 14,
                 spreadRadius: 1,
               ),

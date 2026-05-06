@@ -26,7 +26,7 @@ class PlayerSeat extends StatelessWidget {
         color: AppTheme.panel,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isCurrent ? AppTheme.success : borderColor.withOpacity(0.75),
+          color: isCurrent ? AppTheme.success : borderColor.withValues(alpha: 0.75),
           width: isCurrent ? 2 : 1.2,
         ),
       ),

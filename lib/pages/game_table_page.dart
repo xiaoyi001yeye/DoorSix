@@ -656,7 +656,7 @@ class _FinishOrderBar extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 300),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppTheme.panel.withOpacity(0.9),
+        color: AppTheme.panel.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Text(

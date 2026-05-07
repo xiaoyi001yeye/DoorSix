@@ -6,6 +6,17 @@ if [ ! -d android ]; then
 fi
 
 manifest="android/app/src/main/AndroidManifest.xml"
+ensure_permission() {
+  local permission="$1"
+
+  if [ -f "$manifest" ] && ! grep -q "android.permission.${permission}" "$manifest"; then
+    perl -0pi -e "s/(^\\s*<application\\b)/    <uses-permission android:name=\"android.permission.${permission}\" \\/>\\n\$1/m" "$manifest"
+  fi
+}
+
+ensure_permission INTERNET
+ensure_permission ACCESS_NETWORK_STATE
+
 if [ -f "$manifest" ] && ! grep -q 'android:usesCleartextTraffic=' "$manifest"; then
-  perl -0pi -e 's/<application(\s+)/<application$1        android:usesCleartextTraffic="true"\n/s' "$manifest"
+  perl -0pi -e 's/<application\b/<application android:usesCleartextTraffic="true"/s' "$manifest"
 fi

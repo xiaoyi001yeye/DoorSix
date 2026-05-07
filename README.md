@@ -29,7 +29,7 @@ flutter test
 flutter build apk --release
 ```
 
-`prepare_android.sh` 会在生成 Android scaffold 后打开 `usesCleartextTraffic`，用于当前 HTTP 后端；后续切到 HTTPS 后可以移除这一步。
+`prepare_android.sh` 会在生成 Android scaffold 后补上 release 包需要的 `INTERNET` / `ACCESS_NETWORK_STATE` 权限，并打开 `usesCleartextTraffic` 用于当前 HTTP 后端；后续切到 HTTPS 后可以移除明文流量开关。
 
 ## 文档
 

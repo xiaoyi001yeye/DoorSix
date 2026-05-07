@@ -1,5 +1,6 @@
 import 'card_model.dart';
 import 'player_model.dart';
+import 'round_result.dart';
 import '../services/rule_engine.dart';
 
 class OnlineSession {

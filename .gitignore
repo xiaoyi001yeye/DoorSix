@@ -23,3 +23,6 @@ windows/
 
 # Logs
 *.log
+
+# Local private deployment data
+.local/secrets/

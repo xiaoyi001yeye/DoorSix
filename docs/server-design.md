@@ -170,23 +170,24 @@ logs/matches/2026-05-07.ndjson
 
 ```json
 {
-  "ruleSetId": "zha_liujia_simple_v1",
-  "name": "砸六家简化规则",
-  "deckCount": 2,
+  "ruleSetId": "zha_liujia_tianjin_basic_v1",
+  "name": "天津砸六家基础规则",
+  "deckCount": 1,
   "playerCount": 6,
   "minHumanPlayersToStart": 1,
   "fillAiSeats": true,
   "teamMode": "alternate_seats",
   "seatTeams": {
-    "0": "A",
-    "1": "B",
-    "2": "A",
-    "3": "B",
-    "4": "A",
-    "5": "B"
+    "0": "B",
+    "1": "A",
+    "2": "B",
+    "3": "A",
+    "4": "B",
+    "5": "A"
   },
-  "enabledCombos": ["single", "pair", "triple", "bomb", "joker_pair"],
-  "settlementMode": "first_team_all_finished"
+  "enabledCombos": ["single", "pair", "triple", "quad"],
+  "wildCards": ["big_joker", "small_joker", "3", "2"],
+  "settlementMode": "basic_gong_no_teammate_left_home"
 }
 ```
 
@@ -195,7 +196,7 @@ logs/matches/2026-05-07.ndjson
 - 不提供规则列表接口。
 - 不提供自定义规则接口。
 - 创建房间时不传 `ruleSetId`。
-- 服务端始终使用 `zha_liujia_simple_v1`。
+- 服务端始终使用 `zha_liujia_tianjin_basic_v1`。
 - 房间内至少 1 名真人即可开局，空座位由服务端 AI 补齐到 6 个席位。
 
 ## 7. AI 补位与最简单出牌策略
@@ -220,7 +221,7 @@ AI 座位示例：
   "ready": true,
   "connected": false,
   "isAi": true,
-  "cardCount": 18,
+  "cardCount": 9,
   "finishRank": null
 }
 ```
@@ -235,7 +236,7 @@ AI 座位示例：
 2. 如果需要跟牌，AI 找出所有能压过当前桌面牌型的合法组合。
 3. 如果存在可出组合，选择点数最小、张数匹配的组合出牌。
 4. 如果没有可出组合，AI 过牌。
-5. AI 不主动拆炸弹去跟普通牌；只有当前桌面是炸弹或没有其他可出牌型时，才允许出炸弹。
+5. AI 跟牌必须保持相同牌型和张数；四张只能压四张，不能跨牌型压单张、对子或三张。
 6. AI 出完手牌后，服务端记录出完名次。
 
 伪代码：
@@ -309,7 +310,7 @@ else:
   "status": "waiting",
   "playerCount": 1,
   "maxPlayers": 6,
-  "ruleSetId": "zha_liujia_simple_v1",
+  "ruleSetId": "zha_liujia_tianjin_basic_v1",
   "createdAt": 1778150000000,
   "expiresAt": 1778157200000
 }
@@ -323,7 +324,7 @@ else:
 | `status` | string | `waiting`、`playing`、`settled`、`closed` |
 | `playerCount` | number | 当前玩家数 |
 | `maxPlayers` | number | 固定 6 |
-| `ruleSetId` | string | 固定 `zha_liujia_simple_v1` |
+| `ruleSetId` | string | 固定 `zha_liujia_tianjin_basic_v1` |
 | `createdAt` | number | 创建时间 |
 | `expiresAt` | number | 房间过期时间 |
 
@@ -338,14 +339,14 @@ else:
   "isAi": false,
   "ready": true,
   "connected": true,
-  "cardCount": 18,
+  "cardCount": 9,
   "finishRank": null
 }
 ```
 
 ### 8.5 Card
 
-服务端必须给每张牌唯一 ID，避免两副牌中重复牌面混淆。
+服务端必须给每张牌唯一 ID，方便客户端精确同步手牌、选牌和出牌记录。
 
 ```json
 {
@@ -375,7 +376,7 @@ else:
   "gameId": "g_70001",
   "roundNo": 1,
   "status": "playing",
-  "ruleSetId": "zha_liujia_simple_v1",
+  "ruleSetId": "zha_liujia_tianjin_basic_v1",
   "ownerPlayerId": "p_10001",
   "currentTurnSeatIndex": 0,
   "lastPlayedSeatIndex": null,
@@ -408,7 +409,7 @@ else:
   "roomCode": "384921",
   "gameId": "g_70001",
   "roundNo": 1,
-  "ruleSetId": "zha_liujia_simple_v1",
+  "ruleSetId": "zha_liujia_tianjin_basic_v1",
   "winnerTeam": "A",
   "finishOrder": [
     {
@@ -538,7 +539,7 @@ POST /api/v1/rooms
       "status": "waiting",
       "playerCount": 1,
       "maxPlayers": 6,
-      "ruleSetId": "zha_liujia_simple_v1",
+      "ruleSetId": "zha_liujia_tianjin_basic_v1",
       "createdAt": 1778150000000,
       "expiresAt": 1778157200000
     },
@@ -579,7 +580,7 @@ GET /api/v1/rooms/by-code/{roomCode}
       "status": "waiting",
       "playerCount": 4,
       "maxPlayers": 6,
-      "ruleSetId": "zha_liujia_simple_v1",
+      "ruleSetId": "zha_liujia_tianjin_basic_v1",
       "createdAt": 1778150000000,
       "expiresAt": 1778157200000
     },
@@ -623,7 +624,7 @@ POST /api/v1/rooms/by-code/{roomCode}/join
       "status": "waiting",
       "playerCount": 5,
       "maxPlayers": 6,
-      "ruleSetId": "zha_liujia_simple_v1",
+      "ruleSetId": "zha_liujia_tianjin_basic_v1",
       "createdAt": 1778150000000,
       "expiresAt": 1778157200000
     },
@@ -703,7 +704,7 @@ X-Player-Token: <playerToken>
       "gameId": "g_70001",
       "roundNo": 1,
       "status": "playing",
-      "ruleSetId": "zha_liujia_simple_v1",
+      "ruleSetId": "zha_liujia_tianjin_basic_v1",
       "ownerPlayerId": "p_10001",
       "currentTurnSeatIndex": 3,
       "lastPlayedSeatIndex": 1,
@@ -1008,7 +1009,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
       "gameId": "g_70001",
       "roundNo": 1,
       "status": "playing",
-      "ruleSetId": "zha_liujia_simple_v1",
+      "ruleSetId": "zha_liujia_tianjin_basic_v1",
       "ownerPlayerId": "p_10001",
       "currentTurnSeatIndex": 0,
       "lastPlayedSeatIndex": null,
@@ -1023,7 +1024,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
           "isAi": false,
           "ready": true,
           "connected": true,
-          "cardCount": 18,
+          "cardCount": 9,
           "finishRank": null
         },
         {
@@ -1034,7 +1035,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
           "isAi": true,
           "ready": true,
           "connected": false,
-          "cardCount": 18,
+          "cardCount": 9,
           "finishRank": null
         }
       ],

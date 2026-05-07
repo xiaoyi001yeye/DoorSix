@@ -26,11 +26,11 @@ class RuleSet {
   static const tianjin = RuleSet(
     preset: RulePreset.tianjin,
     name: '天津通用',
-    deckCount: 2,
+    deckCount: 1,
     enableTribute: false,
     enableFollowLead: false,
-    enableWildCards: false,
-    summary: '6人两队，隔位坐，按出完顺序与被逮情况结算',
+    enableWildCards: true,
+    summary: '1副牌，红桃4先出，大小王、3、2可作混儿',
   );
 
   static const tanggu = RuleSet(

@@ -42,11 +42,8 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Generate Android scaffold
-        run: |
-          if [ ! -d android ]; then
-            flutter create --platforms=android --project-name door_six .
-          fi
+      - name: Prepare Android scaffold
+        run: ./scripts/prepare_android.sh
 
       - name: Get dependencies
         run: flutter pub get

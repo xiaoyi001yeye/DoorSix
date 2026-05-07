@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'models/rule_set.dart';
 import 'pages/game_table_page.dart';
 import 'pages/home_page.dart';
+import 'pages/online_room_page.dart';
 import 'pages/rule_select_page.dart';
 import 'pages/scoreboard_page.dart';
 import 'utils/app_theme.dart';
@@ -39,6 +40,18 @@ class DoorSixApp extends StatelessWidget {
               ? state.extra! as RuleSet
               : RuleSet.tianjin;
           return GameTablePage(ruleSet: ruleSet);
+        },
+      ),
+      GoRoute(
+        path: '/online/create',
+        builder: (context, state) {
+          return const OnlineRoomPage(initialMode: OnlineEntryMode.create);
+        },
+      ),
+      GoRoute(
+        path: '/online/join',
+        builder: (context, state) {
+          return const OnlineRoomPage(initialMode: OnlineEntryMode.join);
         },
       ),
       GoRoute(

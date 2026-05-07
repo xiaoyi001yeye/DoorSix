@@ -1,0 +1,28 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+  doorsix-server:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - redis
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      PUBLIC_BASE_URL: http://39.104.67.175:8080
+      REDIS_URL: redis://redis:6379
+      ROOM_TTL_SECONDS: 7200
+      MATCH_LOG_DIR: /app/logs/matches
+    ports:
+      - "8080:8080"
+    volumes:
+      - match_logs:/app/logs
+
+volumes:
+  redis_data:
+  match_logs:

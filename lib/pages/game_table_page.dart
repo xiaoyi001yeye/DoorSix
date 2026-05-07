@@ -67,6 +67,7 @@ class _GameTablePageState extends State<GameTablePage> {
   void initState() {
     super.initState();
     _startRound(resetScores: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _kickAiIfNeeded());
   }
 
   @override
@@ -219,17 +220,30 @@ class _GameTablePageState extends State<GameTablePage> {
     ];
     _activeCombo = null;
     _lastPlayedSeat = null;
-    _currentSeat = 0;
+    _currentSeat = _findFirstLeadSeat(hands);
     _passCount = 0;
     _logs
       ..clear()
-      ..add('第 $_round 局开始，规则：${widget.ruleSet.name}');
+      ..add('第 $_round 局开始，规则：${widget.ruleSet.name}')
+      ..add('${_players[_currentSeat].name} 抓到红桃4，先出牌');
     _finishOrder.clear();
     _roundResult = null;
     if (resetScores) {
       _teamAScore = 0;
       _teamBScore = 0;
     }
+  }
+
+  int _findFirstLeadSeat(List<List<CardInstance>> hands) {
+    for (var seat = 0; seat < hands.length; seat += 1) {
+      final hasHeartFour = hands[seat].any((card) {
+        return card.suit == CardSuit.hearts && card.rank == CardRank.four;
+      });
+      if (hasHeartFour) {
+        return seat;
+      }
+    }
+    return 0;
   }
 
   void _toggleCard(String id) {
@@ -375,13 +389,13 @@ class _GameTablePageState extends State<GameTablePage> {
   }
 
   void _maybeFinishRound() {
-    final aFinished = _finishOrder.where((seat) => seat.team == TeamSide.a).length;
-    final bFinished = _finishOrder.where((seat) => seat.team == TeamSide.b).length;
-    if (aFinished < 3 && bFinished < 3) {
+    if (_finishOrder.length < _players.length - 1) {
       return;
     }
 
-    final winner = aFinished == 3 ? TeamSide.a : TeamSide.b;
+    final gongTeam = _finishOrder.first.team;
+    final lastHomeTeam = _lastHomePlayer.team;
+    final winner = gongTeam == lastHomeTeam ? _opponentOf(gongTeam) : gongTeam;
     final caught = _players
         .where((player) => player.team != winner && player.finishRank == null)
         .map((player) => player.name)
@@ -403,6 +417,20 @@ class _GameTablePageState extends State<GameTablePage> {
     }
 
     scheduleMicrotask(_showRoundResult);
+  }
+
+  GamePlayer get _lastHomePlayer {
+    final unfinished = _players.where((player) => player.finishRank == null);
+    if (unfinished.isNotEmpty) {
+      return unfinished.first;
+    }
+
+    final lastFinished = _finishOrder.last;
+    return _players.firstWhere((player) => player.id == lastFinished.playerId);
+  }
+
+  TeamSide _opponentOf(TeamSide team) {
+    return team == TeamSide.a ? TeamSide.b : TeamSide.a;
   }
 
   void _advanceTurn() {
@@ -506,6 +534,7 @@ class _GameTablePageState extends State<GameTablePage> {
                   _round += 1;
                   _startRound(resetScores: false);
                 });
+                _kickAiIfNeeded();
               },
               child: const Text('下一局'),
             ),

@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "id": "zha_liujia_tianjin_basic_v1",
+  "name": "天津砸六家基础规则",
+  "locale": "zh-CN",
+  "canonicalForProject": true,
+  "ambiguityPolicy": {
+    "dataFileIsAuthoritative": true,
+    "conflictResolutionOrder": [
+      "assets/config/rules/zha_liujia_tianjin_basic_v1.json",
+      "AGENT.MD",
+      "docs",
+      "prototypeCode"
+    ],
+    "notes": [
+      "本配置是 DoorSix 项目中天津砸六家基础规则的唯一基准。",
+      "任何代码、页面文案或旧文档与本配置冲突时，以本配置为准。"
+    ]
+  },
+  "sourceStatus": {
+    "type": "project_baseline",
+    "description": "基于天津砸六家常见基础玩法整理，并作为本项目固定实现口径。",
+    "knownVariants": [
+      "天津通用桌规可能有差异",
+      "塘沽路玩法可能有额外进贡、还贡、接风或结算细则",
+      "线上版本和私人牌桌可能另有约定"
+    ]
+  },
+  "players": {
+    "count": 6,
+    "teams": 2,
+    "playersPerTeam": 3,
+    "seatOrder": [
+      {
+        "seatIndex": 0,
+        "team": "B"
+      },
+      {
+        "seatIndex": 1,
+        "team": "A"
+      },
+      {
+        "seatIndex": 2,
+        "team": "B"
+      },
+      {
+        "seatIndex": 3,
+        "team": "A"
+      },
+      {
+        "seatIndex": 4,
+        "team": "B"
+      },
+      {
+        "seatIndex": 5,
+        "team": "A"
+      }
+    ],
+    "teammatesAreAlternateSeats": true
+  },
+  "deck": {
+    "standardDeckCount": 1,
+    "totalCards": 54,
+    "cardsPerPlayer": 9,
+    "includeJokers": true,
+    "suits": [
+      "spades",
+      "hearts",
+      "diamonds",
+      "clubs"
+    ],
+    "ranks": [
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "J",
+      "Q",
+      "K",
+      "A",
+      "2"
+    ],
+    "jokers": [
+      "small_joker",
+      "big_joker"
+    ]
+  },
+  "deal": {
+    "shuffle": true,
+    "dealAllCards": true,
+    "cardsPerPlayer": 9
+  },
+  "lead": {
+    "firstLead": {
+      "holderOfCard": {
+        "suit": "hearts",
+        "rank": "4"
+      },
+      "mustLeadFirstTrick": true,
+      "firstComboMustContainHolderCard": false
+    },
+    "firstLeadAllowedComboKinds": [
+      "single",
+      "pair",
+      "triple",
+      "quad"
+    ]
+  },
+  "comboKinds": [
+    {
+      "id": "single",
+      "label": "单张",
+      "cardCount": 1
+    },
+    {
+      "id": "pair",
+      "label": "对子",
+      "cardCount": 2
+    },
+    {
+      "id": "triple",
+      "label": "三张",
+      "cardCount": 3
+    },
+    {
+      "id": "quad",
+      "label": "四张",
+      "cardCount": 4
+    }
+  ],
+  "comparison": {
+    "mustFollowSameComboKind": true,
+    "mustFollowSameCardCount": true,
+    "crossKindBeatingAllowed": false,
+    "rankOrderHighToLow": [
+      "big_joker",
+      "small_joker",
+      "3",
+      "2",
+      "A",
+      "K",
+      "Q",
+      "J",
+      "10",
+      "9",
+      "8",
+      "7",
+      "6",
+      "5",
+      "4"
+    ],
+    "singleWildCardsUseNaturalRank": true
+  },
+  "wildCards": {
+    "enabled": true,
+    "cards": [
+      "big_joker",
+      "small_joker",
+      "3",
+      "2"
+    ],
+    "substitutionTargetRanksHighToLow": [
+      "3",
+      "2",
+      "A",
+      "K",
+      "Q",
+      "J",
+      "10",
+      "9",
+      "8",
+      "7",
+      "6",
+      "5",
+      "4"
+    ],
+    "allWildComboDefaultRank": "3",
+    "canSubstituteInComboKinds": [
+      "pair",
+      "triple",
+      "quad"
+    ],
+    "cannotSubstituteWhenPlayedAsSingle": true,
+    "singleCardsCompareByNaturalRank": true
+  },
+  "turns": {
+    "direction": "clockwise",
+    "mayPassWhenFollowing": true,
+    "mayPassWhenLeading": false,
+    "newTrickAfterAllOtherActivePlayersPass": true
+  },
+  "finish": {
+    "firstOutLabel": "贡",
+    "lastRemainingLabel": "留在家里",
+    "recordFinishOrder": true
+  },
+  "winCondition": {
+    "mode": "basic_gong_no_teammate_left_home",
+    "description": "拿到贡的一队，且本队无人留在家里，则该队获胜。",
+    "winningTeamMustContainFirstOutPlayer": true,
+    "winningTeamMustNotContainLastRemainingPlayer": true,
+    "ifFirstOutTeamContainsLastRemaining": "opponent_wins"
+  },
+  "disabledInThisBaseline": {
+    "tribute": false,
+    "returnTribute": false,
+    "antiTribute": false,
+    "followLead": false,
+    "scoreMultiplier": false,
+    "customRules": false
+  }
+}

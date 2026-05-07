@@ -65,7 +65,7 @@ class HomePage extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => _showComingSoon(context, '创建房间'),
+                      onPressed: () => context.push('/online/create'),
                       icon: const Icon(Icons.group_add_outlined),
                       label: const Text('创建房间'),
                     ),
@@ -74,7 +74,7 @@ class HomePage extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: () => _showComingSoon(context, '加入房间'),
+                onPressed: () => context.push('/online/join'),
                 icon: const Icon(Icons.login_rounded),
                 label: const Text('加入房间'),
               ),

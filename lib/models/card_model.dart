@@ -53,22 +53,29 @@ class CardInstance {
 extension CardRankPresentation on CardRank {
   int get strength {
     return switch (this) {
-      CardRank.three => 3,
-      CardRank.four => 4,
-      CardRank.five => 5,
-      CardRank.six => 6,
-      CardRank.seven => 7,
-      CardRank.eight => 8,
-      CardRank.nine => 9,
-      CardRank.ten => 10,
-      CardRank.jack => 11,
-      CardRank.queen => 12,
-      CardRank.king => 13,
-      CardRank.ace => 14,
-      CardRank.two => 16,
-      CardRank.smallJoker => 18,
-      CardRank.bigJoker => 19,
+      CardRank.four => 1,
+      CardRank.five => 2,
+      CardRank.six => 3,
+      CardRank.seven => 4,
+      CardRank.eight => 5,
+      CardRank.nine => 6,
+      CardRank.ten => 7,
+      CardRank.jack => 8,
+      CardRank.queen => 9,
+      CardRank.king => 10,
+      CardRank.ace => 11,
+      CardRank.two => 12,
+      CardRank.three => 13,
+      CardRank.smallJoker => 14,
+      CardRank.bigJoker => 15,
     };
+  }
+
+  bool get isWild {
+    return this == CardRank.bigJoker ||
+        this == CardRank.smallJoker ||
+        this == CardRank.three ||
+        this == CardRank.two;
   }
 
   String get label {

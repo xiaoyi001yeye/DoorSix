@@ -7,8 +7,7 @@ enum ComboKind {
   single,
   pair,
   triple,
-  bomb,
-  jokerPair,
+  quad,
 }
 
 class CardCombo {
@@ -16,11 +15,13 @@ class CardCombo {
     required this.kind,
     required this.rankStrength,
     required this.cards,
+    this.effectiveRank,
   });
 
   final ComboKind kind;
   final int rankStrength;
   final List<CardInstance> cards;
+  final CardRank? effectiveRank;
 
   bool get isValid => kind != ComboKind.invalid;
 
@@ -29,14 +30,13 @@ class CardCombo {
       return '牌型不成立';
     }
 
-    final first = cards.first.rank.label;
+    final first = effectiveRank?.label ?? cards.first.rank.label;
     return switch (kind) {
       ComboKind.invalid => '牌型不成立',
       ComboKind.single => '单张 $first',
       ComboKind.pair => '对子 $first',
       ComboKind.triple => '三张 $first',
-      ComboKind.bomb => '炸弹 $first',
-      ComboKind.jokerPair => '王炸',
+      ComboKind.quad => '四张 $first',
     };
   }
 }
@@ -44,7 +44,7 @@ class CardCombo {
 class RuleEngine {
   const RuleEngine();
 
-  List<CardInstance> createDecks({int deckCount = 2}) {
+  List<CardInstance> createDecks({int deckCount = 1}) {
     final cards = <CardInstance>[];
     for (var deckIndex = 0; deckIndex < deckCount; deckIndex += 1) {
       for (final suit in [
@@ -94,7 +94,7 @@ class RuleEngine {
   }
 
   List<List<CardInstance>> dealHands({
-    int deckCount = 2,
+    int deckCount = 1,
     int playerCount = 6,
     Random? random,
   }) {
@@ -134,18 +134,8 @@ class RuleEngine {
       );
     }
 
-    final uniqueRanks = selected.map((card) => card.rank).toSet();
-    final onlyJokers = selected.every((card) => card.suit == CardSuit.joker);
-
-    if (selected.length == 2 && onlyJokers) {
-      return CardCombo(
-        kind: ComboKind.jokerPair,
-        rankStrength: 99,
-        cards: selected,
-      );
-    }
-
-    if (uniqueRanks.length != 1) {
+    final effectiveRank = _effectiveRankFor(selected);
+    if (effectiveRank == null) {
       return CardCombo(
         kind: ComboKind.invalid,
         rankStrength: 0,
@@ -153,16 +143,39 @@ class RuleEngine {
       );
     }
 
-    final rank = selected.first.rank.strength;
     final kind = switch (selected.length) {
       1 => ComboKind.single,
       2 => ComboKind.pair,
       3 => ComboKind.triple,
-      >= 4 => ComboKind.bomb,
+      4 => ComboKind.quad,
       _ => ComboKind.invalid,
     };
 
-    return CardCombo(kind: kind, rankStrength: rank, cards: selected);
+    return CardCombo(
+      kind: kind,
+      rankStrength: effectiveRank.strength,
+      cards: selected,
+      effectiveRank: effectiveRank,
+    );
+  }
+
+  CardRank? _effectiveRankFor(List<CardInstance> cards) {
+    if (cards.length == 1) {
+      return cards.first.rank;
+    }
+
+    final naturalRanks = cards
+        .where((card) => !card.rank.isWild)
+        .map((card) => card.rank)
+        .toSet();
+    if (naturalRanks.length > 1) {
+      return null;
+    }
+    if (naturalRanks.length == 1) {
+      return naturalRanks.first;
+    }
+
+    return CardRank.three;
   }
 
   bool canPlay({
@@ -174,14 +187,6 @@ class RuleEngine {
     }
 
     if (target == null || !target.isValid) {
-      return true;
-    }
-
-    if (candidate.kind == ComboKind.jokerPair) {
-      return target.kind != ComboKind.jokerPair;
-    }
-
-    if (candidate.kind == ComboKind.bomb && target.kind != ComboKind.bomb) {
       return true;
     }
 
@@ -197,21 +202,10 @@ class RuleEngine {
   }
 
   List<CardInstance> suggest(List<CardInstance> hand, CardCombo? target) {
-    final groups = <CardRank, List<CardInstance>>{};
-    for (final card in sortCards(hand)) {
-      groups.putIfAbsent(card.rank, () => []).add(card);
-    }
-
     final candidates = <List<CardInstance>>[];
-    for (final group in groups.values) {
-      for (var size = 1; size <= min(group.length, 4); size += 1) {
-        candidates.add(group.take(size).toList());
-      }
-    }
-
-    final jokers = hand.where((card) => card.suit == CardSuit.joker).toList();
-    if (jokers.length >= 2) {
-      candidates.add(jokers.take(2).toList());
+    final sortedHand = sortCards(hand);
+    for (var size = 1; size <= min(sortedHand.length, 4); size += 1) {
+      candidates.addAll(_combinations(sortedHand, size));
     }
 
     candidates.sort((a, b) {
@@ -232,5 +226,25 @@ class RuleEngine {
     }
 
     return [];
+  }
+
+  List<List<CardInstance>> _combinations(List<CardInstance> cards, int size) {
+    final result = <List<CardInstance>>[];
+
+    void collect(int start, List<CardInstance> current) {
+      if (current.length == size) {
+        result.add(current.toList());
+        return;
+      }
+
+      for (var i = start; i < cards.length; i += 1) {
+        current.add(cards[i]);
+        collect(i + 1, current);
+        current.removeLast();
+      }
+    }
+
+    collect(0, []);
+    return result;
   }
 }

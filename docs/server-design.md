@@ -8,7 +8,6 @@
 
 - 不做大厅。
 - 不做观战。
-- 不做历史战绩。
 - 不做自定义规则。
 - 不做账号体系。
 
@@ -17,8 +16,10 @@
 - 房间号组局。
 - 6 人牌桌。
 - 房间内临时玩家身份。
+- Redis 运行态状态存储。
 - WebSocket 实时同步。
 - 服务端权威发牌、出牌校验和结算。
+- 历史战绩以结构化日志文件保存，方便后续研究。
 
 当服务端、Flutter/安卓端、规则引擎或需求发生变更时，必须核对本文和代码是否一致。
 
@@ -31,7 +32,6 @@
 | 账号登录 | 不做账号系统，创建/加入房间时生成房间内临时身份 |
 | 大厅和房间列表 | 不做公开大厅，只支持房间号加入 |
 | 观战 | 不支持，房间最多 6 个玩家 |
-| 历史战绩 | 不提供战绩接口，不做战绩聚合 |
 | 自定义规则 | 不支持，固定一套 `砸六家简化规则` |
 | 好友系统 | 不支持 |
 | 排行榜 | 不支持 |
@@ -59,6 +59,8 @@
 - 推进回合。
 - 记录出完顺序。
 - 计算单局结果。
+- 将每局结算结果追加写入结构化日志文件。
+- 从结构化日志中读取历史战绩。
 - 支持断线重连时恢复牌桌快照。
 
 ## 4. 通信方式
@@ -70,7 +72,9 @@ Flutter/安卓端
   │   ├── 通过房间号查询房间
   │   ├── 加入房间
   │   ├── 离开房间
-  │   └── 获取房间快照
+  │   ├── 获取房间快照
+  │   ├── 查询玩家历史战绩
+  │   └── 查询房间历史战绩
   └── WebSocket
       ├── 入桌快照
       ├── 准备/取消准备
@@ -87,24 +91,63 @@ Flutter/安卓端
 
 ### 5.1 外部依赖
 
-最小版本可以只依赖一个后端进程，不强制依赖数据库。
+最小版本保留 Redis，但不引入数据库。Redis 保存实时运行态，日志文件保存历史战绩。
 
 | 依赖 | 是否必需 | 用途 |
 | --- | --- | --- |
 | HTTP 服务 | 必需 | 创建房间、加入房间、快照查询 |
 | WebSocket 服务 | 必需 | 牌桌实时同步 |
-| 内存状态存储 | 必需 | 保存房间、玩家、牌局状态 |
-| Redis | 可选 | 多实例部署、状态共享、房间 TTL、连接状态 |
-| 文件日志 | 可选 | 运行日志和排错，不作为战绩功能 |
+| Redis | 必需 | 保存房间、牌桌、手牌、连接状态、`playerToken`、锁、事件序号和 TTL |
+| 结构化战绩日志 | 必需 | 每局结算后追加写入，供历史战绩读取和后续研究 |
+| 文件运行日志 | 可选 | 运行日志和错误排查 |
 | 数据库 | 不使用 | 最小版本不引入 |
 
 建议落地顺序：
 
-1. 单进程内存版。
-2. 如果要部署多实例，再把房间状态迁移到 Redis。
-3. 数据库等后续确实需要账号、战绩、排行榜时再评估。
+1. 先实现 Redis 版房间和牌桌状态。
+2. 同步实现结算日志追加写入。
+3. 再实现从日志读取玩家和房间历史战绩。
+4. 数据库等后续确实需要账号、排行榜或复杂查询时再评估。
 
-### 5.2 服务端内部模块
+### 5.2 Redis 职责
+
+Redis 负责保存会随牌桌进行而变化的实时状态。
+
+推荐 key 设计：
+
+| Key | 类型 | 说明 |
+| --- | --- | --- |
+| `room:{roomId}` | hash/json | 房间基础信息 |
+| `room_code:{roomCode}` | string | 房间号到 `roomId` 的映射 |
+| `room:{roomId}:seats` | hash/json | 6 个座位状态 |
+| `room:{roomId}:game` | hash/json | 当前牌桌公共状态 |
+| `room:{roomId}:hand:{playerId}` | list/json | 某玩家完整手牌 |
+| `room:{roomId}:token:{playerToken}` | string | `playerToken` 到 `playerId` 的映射 |
+| `room:{roomId}:connections` | hash | 玩家连接状态 |
+| `room:{roomId}:eventSeq` | string/integer | 服务端递增事件序号 |
+| `lock:room:{roomId}` | string | 房间操作锁 |
+
+Redis 需要支持：
+
+- 房间 TTL，过期自动清理无人房间。
+- 出牌/过牌操作加锁，避免并发修改同一牌桌。
+- `playerToken` 校验。
+- 断线重连时读取最新快照。
+- 如果后端多实例部署，用 Redis Pub/Sub 或 Streams 分发牌桌事件。
+
+### 5.3 结构化战绩日志职责
+
+历史战绩不进数据库，使用追加式日志文件。
+
+推荐路径：
+
+```text
+logs/matches/2026-05-07.ndjson
+```
+
+一行一局结算结果，格式为 JSON。该日志是历史战绩的事实来源。
+
+### 5.4 服务端内部模块
 
 | 模块 | 职责 |
 | --- | --- |
@@ -114,6 +157,8 @@ Flutter/安卓端
 | `RuleEngine` | 识别牌型、校验出牌、比较牌型大小、计算结算 |
 | `TableGateway` | WebSocket 连接、消息接收、事件广播 |
 | `SnapshotService` | 生成不同玩家视角的牌桌快照 |
+| `RedisStateStore` | 读写 Redis 中的房间、牌桌、手牌、锁和事件序号 |
+| `MatchLogService` | 追加写入结算日志，并从日志聚合历史战绩 |
 | `TurnTimerService` | 可选，处理玩家超时自动过牌 |
 | `RuntimeLogService` | 可选，写运行日志和错误日志 |
 
@@ -287,6 +332,66 @@ Flutter/安卓端
 
 - `TableState` 是公共状态，不包含其他玩家完整手牌。
 - 客户端自己的完整手牌由 `myHand` 单独返回。
+
+### 7.8 MatchLog
+
+每局结算后，服务端追加写入一条结构化战绩日志。
+
+```json
+{
+  "logType": "round_settled",
+  "logVersion": 1,
+  "createdAt": 1778150000000,
+  "roomId": "r_90001",
+  "roomCode": "384921",
+  "gameId": "g_70001",
+  "roundNo": 1,
+  "ruleSetId": "zha_liujia_simple_v1",
+  "winnerTeam": "A",
+  "finishOrder": [
+    {
+      "seatIndex": 0,
+      "playerId": "p_10001",
+      "nickname": "小乙",
+      "team": "A",
+      "rank": 1
+    }
+  ],
+  "caughtPlayers": [
+    {
+      "seatIndex": 3,
+      "playerId": "p_10004",
+      "nickname": "玩家4",
+      "team": "B"
+    }
+  ],
+  "scoreDelta": {
+    "teamA": 5,
+    "teamB": 0
+  },
+  "totalScoreAfterRound": {
+    "teamA": 5,
+    "teamB": 0
+  },
+  "players": [
+    {
+      "seatIndex": 0,
+      "playerId": "p_10001",
+      "nickname": "小乙",
+      "team": "A"
+    }
+  ],
+  "settlementReason": "team_all_finished"
+}
+```
+
+写入要求：
+
+- 一局只写一次。
+- 追加写入，不覆盖旧日志。
+- 一行一个完整 JSON。
+- 查询历史战绩时从该日志读取和聚合。
+- 该日志用于后续研究、回放分析和可能的数据迁移。
 
 ## 8. HTTP 通用返回结构
 
@@ -563,6 +668,125 @@ X-Player-Token: <playerToken>
       }
     ],
     "eventSeq": 128
+  },
+  "error": null
+}
+```
+
+### 9.6 获取玩家历史战绩
+
+从结构化战绩日志中读取和聚合当前玩家历史战绩。
+
+```http
+GET /api/v1/players/me/stats?limit=20
+```
+
+请求 Header：
+
+```text
+X-Player-Token: <playerToken>
+```
+
+查询参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `limit` | number | 否 | 最近结果数量，默认 20 |
+| `from` | number | 否 | 起始毫秒时间戳 |
+| `to` | number | 否 | 结束毫秒时间戳 |
+
+返回：
+
+```json
+{
+  "success": true,
+  "requestId": "req_006",
+  "data": {
+    "totalRounds": 20,
+    "wins": 12,
+    "losses": 8,
+    "winRate": 0.6,
+    "recentResults": [
+      {
+        "roomId": "r_90001",
+        "gameId": "g_70001",
+        "roundNo": 1,
+        "winnerTeam": "A",
+        "myTeam": "A",
+        "result": "win",
+        "myRank": 1,
+        "scoreDelta": 5,
+        "createdAt": 1778150000000
+      }
+    ]
+  },
+  "meta": {
+    "source": "match_log",
+    "logVersion": 1
+  },
+  "error": null
+}
+```
+
+### 9.7 获取房间历史战绩
+
+从结构化战绩日志中读取某个房间的历史局记录。
+
+```http
+GET /api/v1/rooms/{roomId}/history?limit=20
+```
+
+请求 Header：
+
+```text
+X-Player-Token: <playerToken>
+```
+
+查询参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `limit` | number | 否 | 最近局数，默认 20 |
+| `before` | number | 否 | 返回该时间戳之前的记录 |
+
+返回：
+
+```json
+{
+  "success": true,
+  "requestId": "req_007",
+  "data": {
+    "roomId": "r_90001",
+    "rounds": [
+      {
+        "gameId": "g_70001",
+        "roundNo": 1,
+        "winnerTeam": "A",
+        "finishOrder": [
+          {
+            "seatIndex": 0,
+            "playerId": "p_10001",
+            "nickname": "小乙",
+            "team": "A",
+            "rank": 1
+          }
+        ],
+        "caughtPlayers": [],
+        "scoreDelta": {
+          "teamA": 5,
+          "teamB": 0
+        },
+        "totalScoreAfterRound": {
+          "teamA": 5,
+          "teamB": 0
+        },
+        "createdAt": 1778150000000
+      }
+    ]
+  },
+  "meta": {
+    "source": "match_log",
+    "logVersion": 1
   },
   "error": null
 }
@@ -1061,6 +1285,9 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 - 客户端不能自行决定是否压过桌面牌。
 - 出完名次由服务端记录。
 - 单局结算由服务端计算。
+- 结算完成后必须追加写入结构化战绩日志。
+- 历史战绩接口只能从结构化战绩日志读取和聚合。
+- Redis 是运行态事实来源，战绩日志是历史事实来源。
 - 重复请求不能重复生效。
 - 断线重连后必须能恢复当前玩家视角快照。
 
@@ -1079,6 +1306,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 | 出完顺序 | `finishOrder`、`cards_played.finishRank` |
 | 单局结果 | `round_settled` |
 | 总比分 | `score`、`round_settled.totalScore` |
+| 历史战绩 | HTTP 战绩接口，从结构化战绩日志聚合 |
 
 客户端不应自行修改这些权威状态，只能根据服务端事件更新。
 
@@ -1090,21 +1318,25 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 2. 通过房间号查询房间。
 3. 通过房间号加入房间。
 4. WebSocket 连接和 `playerToken` 校验。
-5. 牌桌快照。
-6. 准备/取消准备。
-7. 房主开始游戏。
-8. 服务端洗牌和发牌。
-9. 出牌校验和广播。
-10. 过牌和新一轮。
-11. 出完名次。
-12. 单局结算。
-13. 断线重连后重新推送快照。
+5. Redis 状态读写。
+6. 牌桌快照。
+7. 准备/取消准备。
+8. 房主开始游戏。
+9. 服务端洗牌和发牌。
+10. 出牌校验和广播。
+11. 过牌和新一轮。
+12. 出完名次。
+13. 单局结算。
+14. 结算日志写入。
+15. 从日志读取玩家历史战绩。
+16. 从日志读取房间历史战绩。
+17. 断线重连后重新推送快照。
 
 第二阶段：
 
 1. 超时自动过牌。
 2. 房间过期清理。
-3. Redis 状态存储。
+3. Redis Pub/Sub 或 Streams 支持多实例事件分发。
 4. 运行日志。
 5. 更完整的天津/塘沽路规则。
 
@@ -1117,6 +1349,8 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 - 修改 `playerToken` 机制。
 - 修改房间、座位、牌桌状态字段。
 - 修改出牌、过牌、发牌、结算逻辑。
+- 修改 Redis key 设计或状态存储结构。
+- 修改结构化战绩日志字段或历史战绩读取逻辑。
 - 修改 Flutter 端联网模型。
 - 新增服务端代码目录或后端仓库。
 
@@ -1127,4 +1361,6 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 - 错误码与代码一致。
 - WebSocket 事件名与代码一致。
 - Flutter model 与服务端 JSON 字段一致。
+- Redis key 和字段与实现一致。
+- MatchLog 字段与战绩接口聚合逻辑一致。
 - 如果代码暂未实现，应在本文标注为后续阶段，而不是让文档假装已经完成。

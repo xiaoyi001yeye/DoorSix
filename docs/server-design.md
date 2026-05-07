@@ -14,7 +14,7 @@
 只保留最小闭环：
 
 - 房间号组局。
-- 6 人牌桌。
+- 6 座牌桌，真人不足 6 人时由服务端 AI 补齐。
 - 房间内临时玩家身份。
 - Redis 运行态状态存储。
 - WebSocket 实时同步。
@@ -31,7 +31,7 @@
 | --- | --- |
 | 账号登录 | 不做账号系统，创建/加入房间时生成房间内临时身份 |
 | 大厅和房间列表 | 不做公开大厅，只支持房间号加入 |
-| 观战 | 不支持，房间最多 6 个玩家 |
+| 观战 | 不支持，房间最多 6 个真人玩家 |
 | 自定义规则 | 不支持，固定一套 `砸六家简化规则` |
 | 好友系统 | 不支持 |
 | 排行榜 | 不支持 |
@@ -48,6 +48,7 @@
 - 通过房间号加入房间。
 - 为每个玩家生成房间内临时 `playerToken`。
 - 管理 6 个座位。
+- 开局时用 AI 填充空座位，保证牌桌始终有 6 个参赛席位。
 - 固定隔位分队。
 - 管理准备状态。
 - 开局时洗牌和发牌。
@@ -155,6 +156,7 @@ logs/matches/2026-05-07.ndjson
 | `PlayerSessionService` | 生成和校验房间内临时 `playerToken` |
 | `GameStateService` | 管理牌桌状态、当前回合、手牌、出完顺序 |
 | `RuleEngine` | 识别牌型、校验出牌、比较牌型大小、计算结算 |
+| `AIPlayerService` | 为未满 6 人的空座补 AI，并执行最简单出牌策略 |
 | `TableGateway` | WebSocket 连接、消息接收、事件广播 |
 | `SnapshotService` | 生成不同玩家视角的牌桌快照 |
 | `RedisStateStore` | 读写 Redis 中的房间、牌桌、手牌、锁和事件序号 |
@@ -172,6 +174,8 @@ logs/matches/2026-05-07.ndjson
   "name": "砸六家简化规则",
   "deckCount": 2,
   "playerCount": 6,
+  "minHumanPlayersToStart": 1,
+  "fillAiSeats": true,
   "teamMode": "alternate_seats",
   "seatTeams": {
     "0": "A",
@@ -192,10 +196,65 @@ logs/matches/2026-05-07.ndjson
 - 不提供自定义规则接口。
 - 创建房间时不传 `ruleSetId`。
 - 服务端始终使用 `zha_liujia_simple_v1`。
+- 房间内至少 1 名真人即可开局，空座位由服务端 AI 补齐到 6 个席位。
 
-## 7. 核心数据结构
+## 7. AI 补位与最简单出牌策略
 
-### 7.1 Player
+### 7.1 AI 补位规则
+
+- 房主可以在真人不足 6 人时开始游戏。
+- 开局时，服务端扫描 0 到 5 号座位。
+- 空座位由服务端创建 AI 玩家补齐。
+- AI 玩家也属于 A 队或 B 队，队伍仍按座位隔位分配。
+- AI 玩家没有 `playerToken`，不接受客户端连接。
+- AI 玩家出牌由服务端 `AIPlayerService` 自动执行。
+
+AI 座位示例：
+
+```json
+{
+  "seatIndex": 4,
+  "playerId": "ai_4",
+  "nickname": "AI 4",
+  "team": "A",
+  "ready": true,
+  "connected": false,
+  "isAi": true,
+  "cardCount": 18,
+  "finishRank": null
+}
+```
+
+### 7.2 最简单 AI 出牌策略
+
+第一版 AI 不做配合，不记牌，不考虑队友，只保证能让游戏跑通。
+
+策略：
+
+1. 如果当前是新一轮领出，AI 出手牌中最小的一张单牌。
+2. 如果需要跟牌，AI 找出所有能压过当前桌面牌型的合法组合。
+3. 如果存在可出组合，选择点数最小、张数匹配的组合出牌。
+4. 如果没有可出组合，AI 过牌。
+5. AI 不主动拆炸弹去跟普通牌；只有当前桌面是炸弹或没有其他可出牌型时，才允许出炸弹。
+6. AI 出完手牌后，服务端记录出完名次。
+
+伪代码：
+
+```text
+if tableCombo == null:
+  play lowest single
+else:
+  candidates = find legal combos that beat tableCombo
+  candidates = filter same combo type first
+  if candidates not empty:
+    play lowest strength candidate
+  else:
+    pass
+```
+
+## 8. 核心数据结构
+
+### 8.1 Player
 
 最小版没有账号，`Player` 只在房间内有效。
 
@@ -205,6 +264,7 @@ logs/matches/2026-05-07.ndjson
   "nickname": "小乙",
   "seatIndex": 0,
   "team": "A",
+  "isAi": false,
   "connected": true,
   "ready": false
 }
@@ -216,10 +276,11 @@ logs/matches/2026-05-07.ndjson
 | `nickname` | string | 昵称 |
 | `seatIndex` | number | 座位号，0 到 5 |
 | `team` | string | `A` 或 `B` |
+| `isAi` | boolean | 是否服务端 AI |
 | `connected` | boolean | WebSocket 是否在线 |
 | `ready` | boolean | 是否准备 |
 
-### 7.2 PlayerSession
+### 8.2 PlayerSession
 
 创建或加入房间后由服务端返回，客户端需要本地保存，用于 WebSocket 和后续 HTTP 请求。
 
@@ -238,7 +299,7 @@ logs/matches/2026-05-07.ndjson
 - 房间关闭后失效。
 - 服务端可以把它实现成签名 token 或随机字符串。
 
-### 7.3 Room
+### 8.3 Room
 
 ```json
 {
@@ -266,7 +327,7 @@ logs/matches/2026-05-07.ndjson
 | `createdAt` | number | 创建时间 |
 | `expiresAt` | number | 房间过期时间 |
 
-### 7.4 Seat
+### 8.4 Seat
 
 ```json
 {
@@ -274,6 +335,7 @@ logs/matches/2026-05-07.ndjson
   "playerId": "p_10001",
   "nickname": "小乙",
   "team": "A",
+  "isAi": false,
   "ready": true,
   "connected": true,
   "cardCount": 18,
@@ -281,7 +343,7 @@ logs/matches/2026-05-07.ndjson
 }
 ```
 
-### 7.5 Card
+### 8.5 Card
 
 服务端必须给每张牌唯一 ID，避免两副牌中重复牌面混淆。
 
@@ -294,7 +356,7 @@ logs/matches/2026-05-07.ndjson
 }
 ```
 
-### 7.6 Combo
+### 8.6 Combo
 
 ```json
 {
@@ -305,7 +367,7 @@ logs/matches/2026-05-07.ndjson
 }
 ```
 
-### 7.7 TableState
+### 8.7 TableState
 
 ```json
 {
@@ -333,7 +395,7 @@ logs/matches/2026-05-07.ndjson
 - `TableState` 是公共状态，不包含其他玩家完整手牌。
 - 客户端自己的完整手牌由 `myHand` 单独返回。
 
-### 7.8 MatchLog
+### 8.8 MatchLog
 
 每局结算后，服务端追加写入一条结构化战绩日志。
 
@@ -899,6 +961,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
       "playerId": "p_10002",
       "nickname": "玩家2",
       "team": "A",
+      "isAi": false,
       "ready": true,
       "connected": true,
       "cardCount": 0,
@@ -926,8 +989,9 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 
 - 发送者是房主。
 - 房间状态为 `waiting`。
-- 房间正好 6 人。
-- 6 人都已准备。
+- 房间内至少有 1 名真人玩家。
+- 房间内所有真人玩家都已准备。
+- 空座位会在开局时由服务端 AI 补齐到 6 个席位。
 
 服务端向每名玩家分别推送：
 
@@ -950,7 +1014,30 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
       "lastPlayedSeatIndex": null,
       "passCount": 0,
       "tableCombo": null,
-      "seats": [],
+      "seats": [
+        {
+          "seatIndex": 0,
+          "playerId": "p_10001",
+          "nickname": "小乙",
+          "team": "A",
+          "isAi": false,
+          "ready": true,
+          "connected": true,
+          "cardCount": 18,
+          "finishRank": null
+        },
+        {
+          "seatIndex": 1,
+          "playerId": "ai_1",
+          "nickname": "AI 1",
+          "team": "B",
+          "isAi": true,
+          "ready": true,
+          "connected": false,
+          "cardCount": 18,
+          "finishRank": null
+        }
+      ],
       "finishOrder": [],
       "score": {
         "teamA": 0,
@@ -1174,6 +1261,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
       "playerId": "p_10002",
       "nickname": "玩家2",
       "team": "A",
+      "isAi": false,
       "ready": false,
       "connected": true,
       "cardCount": 0,
@@ -1285,6 +1373,9 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 - 客户端不能自行决定是否压过桌面牌。
 - 出完名次由服务端记录。
 - 单局结算由服务端计算。
+- 真人不足 6 人开局时，空座必须由服务端 AI 补齐。
+- AI 的出牌也必须经过同一套 `RuleEngine` 校验。
+- 第一版 AI 使用最简单策略：新一轮出最小单张，跟牌时出最小可压牌，否则过牌。
 - 结算完成后必须追加写入结构化战绩日志。
 - 历史战绩接口只能从结构化战绩日志读取和聚合。
 - Redis 是运行态事实来源，战绩日志是历史事实来源。
@@ -1322,15 +1413,17 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 6. 牌桌快照。
 7. 准备/取消准备。
 8. 房主开始游戏。
-9. 服务端洗牌和发牌。
-10. 出牌校验和广播。
-11. 过牌和新一轮。
-12. 出完名次。
-13. 单局结算。
-14. 结算日志写入。
-15. 从日志读取玩家历史战绩。
-16. 从日志读取房间历史战绩。
-17. 断线重连后重新推送快照。
+9. AI 补齐空座。
+10. 最简单 AI 出牌策略。
+11. 服务端洗牌和发牌。
+12. 出牌校验和广播。
+13. 过牌和新一轮。
+14. 出完名次。
+15. 单局结算。
+16. 结算日志写入。
+17. 从日志读取玩家历史战绩。
+18. 从日志读取房间历史战绩。
+19. 断线重连后重新推送快照。
 
 第二阶段：
 
@@ -1349,6 +1442,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 - 修改 `playerToken` 机制。
 - 修改房间、座位、牌桌状态字段。
 - 修改出牌、过牌、发牌、结算逻辑。
+- 修改 AI 补位或 AI 出牌策略。
 - 修改 Redis key 设计或状态存储结构。
 - 修改结构化战绩日志字段或历史战绩读取逻辑。
 - 修改 Flutter 端联网模型。

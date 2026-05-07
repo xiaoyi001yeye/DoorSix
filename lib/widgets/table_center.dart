@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../models/card_model.dart';
 import '../services/rule_engine.dart';
 import '../utils/app_theme.dart';
+import 'hand_card.dart';
 
 class TableCenter extends StatelessWidget {
   const TableCenter({
@@ -10,6 +12,7 @@ class TableCenter extends StatelessWidget {
     required this.lastPlayedBy,
     required this.currentPlayer,
     required this.passCount,
+    this.playedCards = const [],
     super.key,
   });
 
@@ -17,6 +20,7 @@ class TableCenter extends StatelessWidget {
   final String? lastPlayedBy;
   final String currentPlayer;
   final int passCount;
+  final List<CardInstance> playedCards;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +28,7 @@ class TableCenter extends StatelessWidget {
     final byText = lastPlayedBy == null ? '等待首出' : '上手：$lastPlayedBy';
 
     return Container(
-      width: 210,
+      width: 250,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.tableDark,
@@ -48,6 +52,28 @@ class TableCenter extends StatelessWidget {
             ).animate().fadeIn(duration: 200.ms).slideY(begin: 0.12, end: 0),
           ),
           const SizedBox(height: 8),
+          if (activeCombo != null && playedCards.isNotEmpty) ...[
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: SizedBox(
+                key: ValueKey(playedCards.map((card) => card.id).join(',')),
+                height: 60,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final card in playedCards)
+                      HandCard(
+                        card: card.copyWith(selected: false),
+                        compact: true,
+                        showSelectionOffset: false,
+                        onTap: () {},
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           Text(
             byText,
             style: const TextStyle(

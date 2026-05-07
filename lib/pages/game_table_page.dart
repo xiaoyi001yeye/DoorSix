@@ -37,6 +37,7 @@ class _GameTablePageState extends State<GameTablePage> {
   late List<List<CardInstance>> _hands;
 
   CardCombo? _activeCombo;
+  List<CardInstance> _lastPlayedCards = [];
   int? _lastPlayedSeat;
   int _currentSeat = 0;
   int _passCount = 0;
@@ -66,8 +67,15 @@ class _GameTablePageState extends State<GameTablePage> {
   @override
   void initState() {
     super.initState();
+    unawaited(_setLandscape());
     _startRound(resetScores: true);
     WidgetsBinding.instance.addPostFrameCallback((_) => _kickAiIfNeeded());
+  }
+
+  @override
+  void dispose() {
+    unawaited(_setPortrait());
+    super.dispose();
   }
 
   @override
@@ -78,78 +86,126 @@ class _GameTablePageState extends State<GameTablePage> {
 
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          children: [
-            _TableHeader(
-              ruleSet: widget.ruleSet,
-              round: _round,
-              teamAScore: _teamAScore,
-              teamBScore: _teamBScore,
-              onBack: () => context.pop(),
-              onRuleTap: _showRuleSheet,
-              onLogTap: _showLogSheet,
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-                child: Stack(
-                  children: [
-                    Align(
-                      alignment: Alignment.center,
-                      child: Container(
-                        width: 250,
-                        height: 168,
-                        decoration: BoxDecoration(
-                          color: AppTheme.tableGreen,
-                          borderRadius: BorderRadius.circular(86),
-                          border: Border.all(color: const Color(0x6679D98B)),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isLandscape = constraints.maxWidth > constraints.maxHeight;
+            return Column(
+              children: [
+                _buildHeader(),
+                if (isLandscape)
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildTableArea(
+                            currentPlayer: currentPlayer,
+                            lastPlayedBy: lastPlayedBy,
+                          ),
                         ),
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.center,
-                      child: TableCenter(
-                        activeCombo: _activeCombo,
-                        lastPlayedBy: lastPlayedBy,
-                        currentPlayer: currentPlayer.name,
-                        passCount: _passCount,
-                      ),
-                    ),
-                    for (var seat = 0; seat < _players.length; seat += 1)
-                      Align(
-                        alignment: _seatAlignment(seat),
-                        child: PlayerSeat(
-                          player: _players[seat],
-                          isCurrent: seat == _currentSeat && _roundResult == null,
-                          isAlly: _players[seat].team == _players[0].team,
+                        SizedBox(
+                          width: 360,
+                          child: _buildHandAndActions(),
                         ),
-                      ),
-                    Align(
-                      alignment: const Alignment(0, 0.68),
-                      child: _FinishOrderBar(finishOrder: _finishOrder),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-            HandArea(
-              cards: _myHand,
-              combo: _selectedCombo,
-              canPlay: _canPlay,
-              onToggle: _toggleCard,
-            ),
-            GameActionBar(
-              isUserTurn: _isUserTurn,
-              canPlay: _canPlay,
-              canPass: _canPass,
-              onHint: _hint,
-              onPlay: _playSelected,
-              onPass: _pass,
-              onSort: _sortMine,
-            ),
-          ],
+                  )
+                else ...[
+                  Expanded(
+                    child: _buildTableArea(
+                      currentPlayer: currentPlayer,
+                      lastPlayedBy: lastPlayedBy,
+                    ),
+                  ),
+                  _buildHandAndActions(),
+                ],
+              ],
+            );
+          },
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return _TableHeader(
+      ruleSet: widget.ruleSet,
+      round: _round,
+      teamAScore: _teamAScore,
+      teamBScore: _teamBScore,
+      onBack: () => context.pop(),
+      onRuleTap: _showRuleSheet,
+      onLogTap: _showLogSheet,
+    );
+  }
+
+  Widget _buildTableArea({
+    required GamePlayer currentPlayer,
+    required String? lastPlayedBy,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+      child: Stack(
+        children: [
+          Align(
+            alignment: Alignment.center,
+            child: Container(
+              width: 300,
+              height: 190,
+              decoration: BoxDecoration(
+                color: AppTheme.tableGreen,
+                borderRadius: BorderRadius.circular(96),
+                border: Border.all(color: const Color(0x6679D98B)),
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.center,
+            child: TableCenter(
+              activeCombo: _activeCombo,
+              playedCards: _lastPlayedCards,
+              lastPlayedBy: lastPlayedBy,
+              currentPlayer: currentPlayer.name,
+              passCount: _passCount,
+            ),
+          ),
+          for (var seat = 0; seat < _players.length; seat += 1)
+            Align(
+              alignment: _seatAlignment(seat),
+              child: PlayerSeat(
+                player: _players[seat],
+                isCurrent: seat == _currentSeat && _roundResult == null,
+                isAlly: _players[seat].team == _players[0].team,
+              ),
+            ),
+          Align(
+            alignment: const Alignment(0, 0.68),
+            child: _FinishOrderBar(finishOrder: _finishOrder),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHandAndActions() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        HandArea(
+          cards: _myHand,
+          combo: _selectedCombo,
+          canPlay: _canPlay,
+          onToggle: _toggleCard,
+        ),
+        GameActionBar(
+          isUserTurn: _isUserTurn,
+          canPlay: _canPlay,
+          canPass: _canPass,
+          onHint: _hint,
+          onPlay: _playSelected,
+          onPass: _pass,
+          onSort: _sortMine,
+        ),
+      ],
     );
   }
 
@@ -219,6 +275,7 @@ class _GameTablePageState extends State<GameTablePage> {
       ),
     ];
     _activeCombo = null;
+    _lastPlayedCards = [];
     _lastPlayedSeat = null;
     _currentSeat = _findFirstLeadSeat(hands);
     _passCount = 0;
@@ -309,6 +366,9 @@ class _GameTablePageState extends State<GameTablePage> {
           .map((card) => card.copyWith(selected: false))
           .toList();
       _activeCombo = combo;
+      _lastPlayedCards = cards
+          .map((card) => card.copyWith(selected: false))
+          .toList(growable: false);
       _lastPlayedSeat = seat;
       _passCount = 0;
       _players = _players.map((player) {
@@ -347,6 +407,7 @@ class _GameTablePageState extends State<GameTablePage> {
       if (_passCount >= _activePlayerCount - 1) {
         _logs.add('一圈过牌，进入新一轮');
         _activeCombo = null;
+        _lastPlayedCards = [];
         _lastPlayedSeat = null;
         _passCount = 0;
         _players = _players.map((player) {
@@ -361,6 +422,20 @@ class _GameTablePageState extends State<GameTablePage> {
 
     HapticFeedback.selectionClick();
     _kickAiIfNeeded();
+  }
+
+  Future<void> _setLandscape() {
+    return SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
+
+  Future<void> _setPortrait() {
+    return SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
   }
 
   int get _activePlayerCount {

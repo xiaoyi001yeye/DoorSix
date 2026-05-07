@@ -1,11 +1,41 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/rule_set.dart';
+import '../services/online_table_service.dart';
 import '../utils/app_theme.dart';
+import '../widgets/server_log_sheet.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final DoorSixBackendClient _backend = DoorSixBackendClient();
+
+  ServerHealthSnapshot _serverHealth = ServerHealthSnapshot(
+    status: ServerHealthStatus.checking,
+    checkedAt: DateTime.now(),
+  );
+  bool _checkingServer = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkingServer = true;
+    unawaited(_loadServerHealth());
+  }
+
+  @override
+  void dispose() {
+    _backend.close();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +63,17 @@ class HomePage extends StatelessWidget {
                         ),
                       ],
                     ),
+                  ),
+                  _ServerTrafficLight(
+                    snapshot: _serverHealth,
+                    checking: _checkingServer,
+                    onRefresh: _checkServer,
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: '服务器日志',
+                    onPressed: () => showServerLogSheet(context),
+                    icon: const Icon(Icons.terminal_rounded),
                   ),
                   IconButton(
                     tooltip: '设置',
@@ -100,6 +141,137 @@ class HomePage extends StatelessWidget {
   void _showComingSoon(BuildContext context, String feature) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$feature 会在牌桌原型稳定后补上')),
+    );
+  }
+
+  Future<void> _checkServer() async {
+    if (_checkingServer) {
+      return;
+    }
+    setState(() {
+      _checkingServer = true;
+      _serverHealth = ServerHealthSnapshot(
+        status: ServerHealthStatus.checking,
+        checkedAt: _serverHealth.checkedAt,
+      );
+    });
+    await _loadServerHealth();
+  }
+
+  Future<void> _loadServerHealth() async {
+    final health = await _backend.health();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _serverHealth = health;
+      _checkingServer = false;
+    });
+  }
+}
+
+class _ServerTrafficLight extends StatelessWidget {
+  const _ServerTrafficLight({
+    required this.snapshot,
+    required this.checking,
+    required this.onRefresh,
+  });
+
+  final ServerHealthSnapshot snapshot;
+  final bool checking;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (snapshot.status) {
+      ServerHealthStatus.available => '服务器可用',
+      ServerHealthStatus.busy => '服务器忙',
+      ServerHealthStatus.down => '服务器死了',
+      ServerHealthStatus.checking => '检测中',
+    };
+    final activeColor = switch (snapshot.status) {
+      ServerHealthStatus.available => AppTheme.success,
+      ServerHealthStatus.busy => AppTheme.teamGold,
+      ServerHealthStatus.down => AppTheme.danger,
+      ServerHealthStatus.checking => AppTheme.teamGold,
+    };
+
+    return Tooltip(
+      message: '$label，点击刷新',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: checking ? null : onRefresh,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppTheme.panel,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: activeColor.withValues(alpha: 0.55)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _LightDot(
+                  color: AppTheme.danger,
+                  active: snapshot.status == ServerHealthStatus.down,
+                ),
+                const SizedBox(width: 4),
+                _LightDot(
+                  color: AppTheme.teamGold,
+                  active: snapshot.status == ServerHealthStatus.busy ||
+                      snapshot.status == ServerHealthStatus.checking,
+                ),
+                const SizedBox(width: 4),
+                _LightDot(
+                  color: AppTheme.success,
+                  active: snapshot.status == ServerHealthStatus.available,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: activeColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LightDot extends StatelessWidget {
+  const _LightDot({
+    required this.color,
+    required this.active,
+  });
+
+  final Color color;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      width: 9,
+      height: 9,
+      decoration: BoxDecoration(
+        color: active ? color : color.withValues(alpha: 0.18),
+        shape: BoxShape.circle,
+        boxShadow: [
+          if (active)
+            BoxShadow(
+              color: color.withValues(alpha: 0.42),
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+        ],
+      ),
     );
   }
 }

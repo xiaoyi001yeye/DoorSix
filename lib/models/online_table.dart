@@ -249,11 +249,45 @@ CardCombo? _comboFromJson(dynamic json) {
     _ => ComboKind.invalid,
   };
   final strength = data['rankStrength'] as int? ?? 0;
+  final cards = (data['cardIds'] as List<dynamic>? ?? const [])
+      .map((cardId) => _cardFromId(cardId as String))
+      .whereType<CardInstance>()
+      .toList(growable: false);
   return CardCombo(
     kind: kind,
     rankStrength: strength,
-    cards: const [],
+    cards: cards,
     effectiveRank: _rankFromStrength(strength),
+  );
+}
+
+CardInstance? _cardFromId(String id) {
+  final parts = id.split('-');
+  if (parts.length < 3 || !parts.first.startsWith('d')) {
+    return null;
+  }
+  final deckIndex = int.tryParse(parts.first.substring(1)) ?? 0;
+  if (parts[1] == 'small' && parts.length >= 3 && parts[2] == 'joker') {
+    return CardInstance(
+      id: id,
+      deckIndex: deckIndex,
+      suit: CardSuit.joker,
+      rank: CardRank.smallJoker,
+    );
+  }
+  if (parts[1] == 'big' && parts.length >= 3 && parts[2] == 'joker') {
+    return CardInstance(
+      id: id,
+      deckIndex: deckIndex,
+      suit: CardSuit.joker,
+      rank: CardRank.bigJoker,
+    );
+  }
+  return CardInstance(
+    id: id,
+    deckIndex: deckIndex,
+    suit: _suitFromBackend(parts[1]),
+    rank: _rankFromBackend(parts[2]),
   );
 }
 

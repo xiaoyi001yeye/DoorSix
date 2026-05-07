@@ -9,12 +9,14 @@ class HandCard extends StatelessWidget {
     required this.card,
     required this.onTap,
     this.compact = false,
+    this.showSelectionOffset = true,
     super.key,
   });
 
   final CardInstance card;
   final VoidCallback onTap;
   final bool compact;
+  final bool showSelectionOffset;
 
   @override
   Widget build(BuildContext context) {
@@ -30,8 +32,8 @@ class HandCard extends StatelessWidget {
         height: height,
         margin: EdgeInsets.only(
           right: compact ? 4 : 6,
-          top: card.selected ? 0 : 14,
-          bottom: card.selected ? 14 : 0,
+          top: showSelectionOffset && !card.selected ? 14 : 0,
+          bottom: showSelectionOffset && card.selected ? 14 : 0,
         ),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(7),

@@ -12,10 +12,12 @@ import '../models/online_table.dart';
 import '../models/player_model.dart';
 import '../services/online_table_service.dart';
 import '../services/rule_engine.dart';
+import '../services/server_log_store.dart';
 import '../utils/app_theme.dart';
 import '../widgets/action_bar.dart';
 import '../widgets/hand_area.dart';
 import '../widgets/player_seat.dart';
+import '../widgets/server_log_sheet.dart';
 import '../widgets/table_center.dart';
 
 enum OnlineEntryMode { create, join }
@@ -60,6 +62,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
 
   @override
   void dispose() {
+    unawaited(_setPortrait());
     _socketSub?.cancel();
     _socket?.close();
     _client.close();
@@ -90,6 +93,11 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
             tooltip: '同步',
             onPressed: _session == null ? null : _syncState,
             icon: const Icon(Icons.sync_rounded),
+          ),
+          IconButton(
+            tooltip: '服务器日志',
+            onPressed: () => showServerLogSheet(context),
+            icon: const Icon(Icons.terminal_rounded),
           ),
         ],
       ),
@@ -232,54 +240,131 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
         _engine.canPlay(candidate: selectedCombo, target: snapshot.tableCombo);
     final canPass = isMyTurn && snapshot.tableCombo != null;
 
-    return Column(
-      children: [
-        _CompactTableHeader(
-          roomCode: _session!.room.roomCode,
-          round: snapshot.roundNo,
-          score: snapshot.score,
-          connected: _connected,
-          onLogs: _showLogs,
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-            child: Stack(
-              children: [
-                Align(
-                  alignment: Alignment.center,
-                  child: Container(
-                    width: 250,
-                    height: 168,
-                    decoration: BoxDecoration(
-                      color: AppTheme.tableGreen,
-                      borderRadius: BorderRadius.circular(86),
-                      border: Border.all(color: const Color(0x6679D98B)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isLandscape = constraints.maxWidth > constraints.maxHeight;
+        return Column(
+          children: [
+            _CompactTableHeader(
+              roomCode: _session!.room.roomCode,
+              round: snapshot.roundNo,
+              score: snapshot.score,
+              connected: _connected,
+              onLogs: _showLogs,
+            ),
+            if (isLandscape)
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildOnlineTableArea(
+                        players: players,
+                        snapshot: snapshot,
+                        currentPlayer: currentPlayer,
+                        currentSeat: currentSeat,
+                        lastPlayedBy: lastPlayedBy,
+                      ),
                     ),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.center,
-                  child: TableCenter(
-                    activeCombo: snapshot.tableCombo,
-                    lastPlayedBy: lastPlayedBy,
-                    currentPlayer: currentPlayer.name,
-                    passCount: snapshot.passCount,
-                  ),
-                ),
-                for (var seat = 0; seat < players.length; seat += 1)
-                  Align(
-                    alignment: _seatAlignment(seat),
-                    child: PlayerSeat(
-                      player: players[seat],
-                      isCurrent: seat == currentSeat && snapshot.status == 'playing',
-                      isAlly: players[seat].team == _selfTeam(snapshot),
+                    SizedBox(
+                      width: 360,
+                      child: _buildOnlineHandAndActions(
+                        myHand: myHand,
+                        selectedCombo: selectedCombo,
+                        selectedCards: selectedCards,
+                        snapshot: snapshot,
+                        isMyTurn: isMyTurn,
+                        canPlay: canPlay,
+                        canPass: canPass,
+                      ),
                     ),
-                  ),
-              ],
+                  ],
+                ),
+              )
+            else ...[
+              Expanded(
+                child: _buildOnlineTableArea(
+                  players: players,
+                  snapshot: snapshot,
+                  currentPlayer: currentPlayer,
+                  currentSeat: currentSeat,
+                  lastPlayedBy: lastPlayedBy,
+                ),
+              ),
+              _buildOnlineHandAndActions(
+                myHand: myHand,
+                selectedCombo: selectedCombo,
+                selectedCards: selectedCards,
+                snapshot: snapshot,
+                isMyTurn: isMyTurn,
+                canPlay: canPlay,
+                canPass: canPass,
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildOnlineTableArea({
+    required List<GamePlayer> players,
+    required OnlineTableSnapshot snapshot,
+    required GamePlayer currentPlayer,
+    required int currentSeat,
+    required String? lastPlayedBy,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+      child: Stack(
+        children: [
+          Align(
+            alignment: Alignment.center,
+            child: Container(
+              width: 300,
+              height: 190,
+              decoration: BoxDecoration(
+                color: AppTheme.tableGreen,
+                borderRadius: BorderRadius.circular(96),
+                border: Border.all(color: const Color(0x6679D98B)),
+              ),
             ),
           ),
-        ),
+          Align(
+            alignment: Alignment.center,
+            child: TableCenter(
+              activeCombo: snapshot.tableCombo,
+              playedCards: snapshot.tableCombo?.cards ?? const <CardInstance>[],
+              lastPlayedBy: lastPlayedBy,
+              currentPlayer: currentPlayer.name,
+              passCount: snapshot.passCount,
+            ),
+          ),
+          for (var seat = 0; seat < players.length; seat += 1)
+            Align(
+              alignment: _seatAlignment(seat),
+              child: PlayerSeat(
+                player: players[seat],
+                isCurrent: seat == currentSeat && snapshot.status == 'playing',
+                isAlly: players[seat].team == _selfTeam(snapshot),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOnlineHandAndActions({
+    required List<CardInstance> myHand,
+    required CardCombo selectedCombo,
+    required List<CardInstance> selectedCards,
+    required OnlineTableSnapshot snapshot,
+    required bool isMyTurn,
+    required bool canPlay,
+    required bool canPass,
+  }) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
         HandArea(
           cards: myHand,
           combo: selectedCombo,
@@ -353,14 +438,21 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
       if (!mounted) {
         return;
       }
+      unawaited(_setOrientationForStatus(snapshot.status));
       setState(() {
         _snapshot = snapshot;
         _selectedCardIds.clear();
       });
     } on DoorSixBackendException catch (error) {
       _showMessage(error.message);
+      if (mounted) {
+        showServerLogSheet(context);
+      }
     } on SocketException {
       _showMessage('连接后端失败，请检查网络');
+      if (mounted) {
+        showServerLogSheet(context);
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -377,11 +469,13 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     _socketSub = socket.listen(
       _handleSocketMessage,
       onDone: () {
+        ServerLogStore.instance.warning('WS 已关闭');
         if (mounted) {
           setState(() => _connected = false);
         }
       },
-      onError: (_) {
+      onError: (error) {
+        ServerLogStore.instance.error('WS 发生错误', detail: error.toString());
         if (mounted) {
           setState(() => _connected = false);
           _showMessage('WebSocket 已断开');
@@ -391,6 +485,10 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
   }
 
   void _handleSocketMessage(dynamic message) {
+    ServerLogStore.instance.info(
+      'WS 收到消息',
+      detail: _compactLogDetail(message.toString()),
+    );
     final data = jsonDecode(message as String) as Map<String, dynamic>;
     final type = data['type'] as String? ?? 'unknown';
     final payload =
@@ -403,6 +501,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
 
     if (payload['tableState'] != null) {
       final snapshot = OnlineTableSnapshot.fromJson(payload);
+      unawaited(_setOrientationForStatus(snapshot.status));
       setState(() {
         _snapshot = snapshot;
         _selectedCardIds.removeWhere(
@@ -449,6 +548,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     try {
       final snapshot = await _client.snapshot(session);
       if (mounted) {
+        unawaited(_setOrientationForStatus(snapshot.status));
         setState(() => _snapshot = snapshot);
       }
     } catch (_) {
@@ -477,16 +577,25 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     final session = _session;
     final socket = _socket;
     if (session == null || socket == null) {
+      ServerLogStore.instance.error(
+        'WS 发送失败',
+        detail: '连接未建立，消息类型：$type',
+      );
       return;
     }
     _seq += 1;
-    socket.add(jsonEncode({
+    final message = jsonEncode({
       'type': type,
       'requestId': 'android_${DateTime.now().millisecondsSinceEpoch}_$_seq',
       'roomId': session.room.roomId,
       'seq': _seq,
       'payload': payload,
-    }));
+    });
+    ServerLogStore.instance.info(
+      'WS 发送 $type',
+      detail: _compactLogDetail(message),
+    );
+    socket.add(message);
   }
 
   OnlineSeat? _selfSeat(OnlineTableSnapshot snapshot) {
@@ -592,6 +701,24 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     }
   }
 
+  Future<void> _setOrientationForStatus(String status) {
+    return status == 'waiting' ? _setPortrait() : _setLandscape();
+  }
+
+  Future<void> _setLandscape() {
+    return SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
+
+  Future<void> _setPortrait() {
+    return SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  }
+
   void _copyRoomCode() {
     final code = _session?.room.roomCode;
     if (code == null) {
@@ -613,6 +740,18 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  String _compactLogDetail(String text) {
+    final normalized = text
+        .replaceAll(RegExp(r'"playerToken"\s*:\s*"[^"]+"'), '"playerToken":"***"')
+        .replaceAll(RegExp(r'playerToken=[^&\s"]+'), 'playerToken=***')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (normalized.length <= 800) {
+      return normalized;
+    }
+    return '${normalized.substring(0, 800)}...';
   }
 }
 

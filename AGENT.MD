@@ -31,6 +31,7 @@ DoorSix 是一个 Flutter App 原型，主题是天津一带流行的扑克牌�
 
 - `docs/app-ui-prototype.md`
 - `docs/init-design.md`
+- `docs/server-design.md`
 - 公开资料中的 `砸六家竞赛规则2024版`
 - 网络公开片段中关于砸六家“天津、六人、两队、扑克牌、按出完顺序结算”的描述
 
@@ -138,6 +139,7 @@ CI 推荐版本：
 - `lib/services/rule_engine.dart`
 - `lib/models/card_model.dart`
 - `docs/app-ui-prototype.md`
+- `docs/server-design.md`
 - `.github/workflows/build-doorsix-apk.yml`
 
 Flutter 可用时运行：
@@ -159,6 +161,8 @@ flutter test
 - 修改核心玩法假设时，必须同步更新文档。
 - 不要把当前简化规则引擎描述成完整天津或塘沽路规则。
 - 能保留规则配置能力时，优先保留配置能力。
+- 涉及多人房间、服务端接口、WebSocket 事件、牌桌同步、出牌/过牌、结算或客户端模型的变更时，必须核对 `docs/server-design.md` 与代码是否一致。
+- 如果代码实现和 `docs/server-design.md` 不一致，要么同步修改代码，要么同步修改文档，不能留下过期接口说明。
 
 ## 产品方向
 
@@ -175,3 +179,11 @@ flutter test
 - 可以看到出完顺序和单局结果。
 
 在线多人和完整地方规则细节，应在基础牌桌体验稳定之后继续推进。
+
+## 多人服务端设计
+
+多人同时在一张桌子上打牌需要服务端作为权威状态源。服务端核心功能、HTTP 接口、WebSocket 事件、参数、返回值、错误码和一致性要求记录在：
+
+- `docs/server-design.md`
+
+后续如果新增后端代码、修改 Flutter 端联网模型、修改房间/座位/准备/开局/发牌/出牌/过牌/结算逻辑，都必须先查看并同步这份文档。

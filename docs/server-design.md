@@ -21,6 +21,7 @@
 - 支持出牌、过牌、回合轮转。
 - 支持断线重连和牌桌状态恢复。
 - 支持单局结算和总战绩。
+- 支持把历史战绩写入结构化日志，并从日志读取战绩。
 - 支持服务端校验牌型、出牌合法性和结算。
 
 ## 3. 总体架构
@@ -29,6 +30,7 @@
 
 - HTTP 接口：登录、房间列表、创建房间、加入房间、获取历史战绩等非实时操作。
 - WebSocket 接口：牌桌内实时事件，包括准备、开局、发牌、出牌、过牌、聊天、断线恢复、结算广播。
+- 历史战绩首版不使用数据库，服务端通过追加式结构化日志保存结算记录，再从日志聚合读取。
 
 推荐通信格式统一使用 JSON。
 
@@ -168,6 +170,97 @@ Flutter/安卓端
   "settlementMode": "finish_order_and_caught"
 }
 ```
+
+### 4.7 战绩日志 MatchLog
+
+历史战绩首版不设计数据库表。服务端在每局结算时写入一条结构化 JSON 日志，后续查询战绩时从日志文件或日志流中读取并聚合。
+
+推荐日志形态：一行一个 JSON 对象，方便追加、grep、按日期归档和离线重算。
+
+日志文件建议：
+
+```text
+logs/matches/2026-05-07.ndjson
+```
+
+单条日志结构：
+
+```json
+{
+  "logType": "round_settled",
+  "logVersion": 1,
+  "createdAt": 1778150000000,
+  "roomId": "r_90001",
+  "roomCode": "384921",
+  "gameId": "g_70001",
+  "roundNo": 1,
+  "ruleSetId": "tianjin_common",
+  "winnerTeam": "A",
+  "finishOrder": [
+    {
+      "seatIndex": 0,
+      "playerId": "p_10001",
+      "nickname": "小乙",
+      "team": "A",
+      "rank": 1
+    }
+  ],
+  "caughtPlayers": [
+    {
+      "seatIndex": 3,
+      "playerId": "p_10004",
+      "nickname": "玩家4",
+      "team": "B"
+    }
+  ],
+  "scoreDelta": {
+    "teamA": 5,
+    "teamB": 0
+  },
+  "totalScoreAfterRound": {
+    "teamA": 5,
+    "teamB": 0
+  },
+  "players": [
+    {
+      "seatIndex": 0,
+      "playerId": "p_10001",
+      "nickname": "小乙",
+      "team": "A"
+    }
+  ],
+  "settlementReason": "team_all_finished"
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `logType` | string | 日志类型，结算日志固定为 `round_settled` |
+| `logVersion` | number | 日志结构版本，后续变更时递增 |
+| `createdAt` | number | 毫秒时间戳 |
+| `roomId` | string | 房间 ID |
+| `roomCode` | string | 房间号 |
+| `gameId` | string | 对局 ID |
+| `roundNo` | number | 局号 |
+| `ruleSetId` | string | 规则版本 |
+| `winnerTeam` | string | 胜方队伍，`A` 或 `B` |
+| `finishOrder` | object[] | 出完顺序 |
+| `caughtPlayers` | object[] | 被逮玩家 |
+| `scoreDelta` | object | 本局积分变化 |
+| `totalScoreAfterRound` | object | 本局结束后的房间总分 |
+| `players` | object[] | 本局所有参与玩家快照 |
+| `settlementReason` | string | 结算原因 |
+
+日志写入要求：
+
+- 只在服务端完成结算后写入。
+- 必须追加写入，不能覆盖旧日志。
+- 单条日志必须是完整 JSON，不能依赖上下文才能解析。
+- 写入失败时，服务端仍可广播结算，但必须记录错误日志并允许后台补写。
+- 查询战绩接口只从日志聚合，不直接读内存牌桌状态。
+- 后续如需上数据库，数据库数据应可由这些日志重放生成。
 
 ## 5. 通用返回结构
 
@@ -564,9 +657,20 @@ GET /api/v1/rooms/{roomId}/snapshot
 
 ### 6.9 获取玩家战绩
 
+从结算日志中聚合玩家战绩。首版不查询数据库。
+
 ```http
 GET /api/v1/players/me/stats
 ```
+
+查询参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `from` | number | 否 | 起始毫秒时间戳 |
+| `to` | number | 否 | 结束毫秒时间戳 |
+| `ruleSetId` | string | 否 | 只统计某个规则版本 |
+| `limit` | number | 否 | 最近结果数量，默认 20 |
 
 返回：
 
@@ -588,6 +692,69 @@ GET /api/v1/players/me/stats
         "createdAt": 1778150000000
       }
     ]
+  },
+  "meta": {
+    "source": "match_log",
+    "logVersion": 1
+  },
+  "error": null
+}
+```
+
+### 6.10 获取房间历史战绩
+
+从结算日志中读取某个房间的历史局记录。
+
+```http
+GET /api/v1/rooms/{roomId}/history?limit=20
+```
+
+查询参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `limit` | number | 否 | 返回最近多少局，默认 20 |
+| `before` | number | 否 | 返回该时间戳之前的记录 |
+
+返回：
+
+```json
+{
+  "success": true,
+  "requestId": "req_010",
+  "data": {
+    "roomId": "r_90001",
+    "rounds": [
+      {
+        "gameId": "g_70001",
+        "roundNo": 1,
+        "ruleSetId": "tianjin_common",
+        "winnerTeam": "A",
+        "finishOrder": [
+          {
+            "seatIndex": 0,
+            "playerId": "p_10001",
+            "nickname": "小乙",
+            "team": "A",
+            "rank": 1
+          }
+        ],
+        "caughtPlayers": [],
+        "scoreDelta": {
+          "teamA": 5,
+          "teamB": 0
+        },
+        "totalScoreAfterRound": {
+          "teamA": 5,
+          "teamB": 0
+        },
+        "createdAt": 1778150000000
+      }
+    ]
+  },
+  "meta": {
+    "source": "match_log",
+    "logVersion": 1
   },
   "error": null
 }
@@ -1218,6 +1385,8 @@ wss://api.example.com/ws/v1/tables/{roomId}?token=<accessToken>
 - 客户端事件必须有幂等保护，重复请求不能重复生效。
 - 断线玩家可以保留座位一段时间。
 - 超时未操作时，服务端可以托管过牌或自动出牌。
+- 历史战绩以结构化结算日志为事实来源，首版不依赖数据库。
+- 写入结算日志时要保证一局只写一次，重复结算事件不能产生重复战绩。
 
 ## 11. 安卓/Flutter 端状态映射
 
@@ -1235,6 +1404,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?token=<accessToken>
 | 出完顺序 | `finishOrder`、`cards_played.finishRank` |
 | 单局结果 | `round_settled` |
 | 总比分 | `score`、`round_settled.totalScore` |
+| 历史战绩 | HTTP 战绩接口，从结算日志聚合 |
 
 客户端不应自行修改这些权威状态，只能根据服务端事件更新。
 
@@ -1252,6 +1422,8 @@ wss://api.example.com/ws/v1/tables/{roomId}?token=<accessToken>
 8. 过牌。
 9. 断线重连状态同步。
 10. 单局结算。
+11. 结算日志写入。
+12. 从日志读取玩家战绩。
 
 第二阶段：
 
@@ -1259,7 +1431,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?token=<accessToken>
 2. 房间号邀请。
 3. 快捷聊天。
 4. 托管。
-5. 多局总战绩。
+5. 房间历史战绩。
 6. 自定义规则。
 
 第三阶段：
@@ -1281,6 +1453,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?token=<accessToken>
 - 修改客户端模型。
 - 修改 `lib/services/rule_engine.dart`。
 - 修改多人房间、座位、出牌、过牌、结算逻辑。
+- 修改结算日志结构或历史战绩读取逻辑。
 - 新增服务端代码目录或后端仓库。
 
 核对要求：
@@ -1290,4 +1463,5 @@ wss://api.example.com/ws/v1/tables/{roomId}?token=<accessToken>
 - 错误码与代码一致。
 - WebSocket 事件名与代码一致。
 - 客户端状态映射与 Flutter model 一致。
+- 结算日志字段与战绩接口聚合逻辑一致。
 - 如果代码暂未实现，应在本文标注为后续阶段，而不是让文档假装已经完成。

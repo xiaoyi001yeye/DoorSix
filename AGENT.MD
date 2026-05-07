@@ -1,130 +1,136 @@
-# DoorSix Agent Notes
+# DoorSix 开发上下文
 
-## Project Context
+## 项目背景
 
-DoorSix is a Flutter prototype for the Tianjin-area poker game usually called `砸六家`.
+DoorSix 是一个 Flutter App 原型，主题是天津一带流行的扑克牌游戏 `砸六家`。
 
-Important naming note:
+命名说明：
 
-- Early project wording used `砸六门`.
-- The intended game is `砸六家`, not a six-door tapping game.
-- Treat `DoorSix` as the app/project name, and `砸六家` as the actual card-game subject.
+- 项目早期曾使用过 `砸六门` 这个说法。
+- 当前确认的实际玩法是 `砸六家`，不是点击六扇门的小游戏。
+- `DoorSix` 是 App 和项目名称，`砸六家` 是真实游戏题材。
 
-## Origin
+## 出处与玩法来源
 
-`砸六家` is understood as a folk poker game popular in Tianjin and nearby areas. Public rule notes describe it as a six-player, two-team poker game. The exact rule set differs by local variant, including Tianjin common play, Tanggu-style rules, online variants, and privately agreed table rules.
+`砸六家` 通常被理解为天津及周边地区流行的民间扑克牌游戏。公开规则资料和民间说法中，它常被描述为六人、两队、隔位坐的团队扑克玩法。
 
-Current source assumptions:
+需要注意：砸六家的地方版本差异很大。天津通用玩法、塘沽路玩法、线上版本和私人牌桌约定都可能不完全一样，所以不要把某一个版本直接当成唯一标准规则。
 
-- It is associated with Tianjin-area folk card play.
-- It uses poker cards.
-- It is played by 6 people.
-- Players are split into 2 teams of 3.
-- Teammates sit in alternating seats.
-- Round results are determined from finishing order and local settlement rules.
+当前项目采用的基础口径：
 
-Reference material used by this project:
+- 游戏流行于天津及周边地区。
+- 使用扑克牌。
+- 6 人参与。
+- 分为 2 队，每队 3 人。
+- 队友隔位坐。
+- 玩家按顺序出牌或过牌。
+- 玩家出完手牌后记录出完名次。
+- 单局结果按出完顺序、被逮情况和当前规则版本结算。
+
+本项目参考资料：
 
 - `docs/app-ui-prototype.md`
 - `docs/init-design.md`
-- Scribd document: `砸六家竞赛规则2024版`
-- Public web snippets describing `砸六家` as a Tianjin six-player team poker game
+- 公开资料中的 `砸六家竞赛规则2024版`
+- 网络公开片段中关于砸六家“天津、六人、两队、扑克牌、按出完顺序结算”的描述
 
-Because local rules vary, do not hard-code one claimed definitive rule set without confirming it with the user.
+由于规则版本不统一，开发时遇到规则争议，应先保留可配置能力，并向用户确认具体玩法。
 
-## Core Gameplay
+## 核心玩法
 
-Stable gameplay model for this app:
+当前 App 使用的稳定玩法模型：
 
-1. Six players sit around one table.
-2. Players are split into Team A and Team B.
-3. Each team has three players.
-4. Teammates are seated alternately so each player is between opponents.
-5. Cards are dealt according to the selected rule set.
-6. Players take turns playing cards or passing.
-7. A player may play a valid card combination that can beat the current table combination.
-8. If a player cannot or chooses not to beat the current combination, they pass.
-9. When enough players pass, the table starts a new lead.
-10. Players who empty their hand are recorded by finishing rank.
-11. A round is settled when the selected rule set says the result is determined.
-12. Settlement can depend on finishing order, caught players, tribute rules, follow-lead rules, and local table conventions.
+1. 六名玩家围坐一桌。
+2. 玩家分为 A 队和 B 队。
+3. 每队三名玩家。
+4. 队友隔位坐，左右相邻通常是对手。
+5. 按当前规则版本发牌。
+6. 玩家依次出牌或过牌。
+7. 出牌必须组成有效牌型。
+8. 跟牌时，出的牌需要能压过当前桌面最大牌型。
+9. 不能压过或策略上不想出时，可以选择过牌。
+10. 一圈足够多玩家过牌后，桌面进入新一轮领出。
+11. 玩家手牌出完后，记录其出完名次。
+12. 单局按当前规则版本判断何时结算。
+13. 结算可能依赖出完顺序、被逮玩家、进贡、接风和本地桌规。
 
-## Rule Variants
+## 规则版本
 
-The app should preserve rule-set flexibility. Known variant buckets:
+App 需要保留规则版本能力。当前设计中的规则版本包括：
 
 - `天津通用`
 - `塘沽路`
 - `自定义`
 
-Potential configurable rules:
+后续可能需要配置的规则项：
 
-- Deck count
-- Dealt card count
-- First lead rule
-- Valid combination types
-- Card rank order
-- Wild cards or mixed cards
-- Tribute / return tribute
-- Anti-tribute
-- Follow-lead / 接风
-- Round settlement
-- Score calculation
+- 使用几副牌
+- 每人发多少张
+- 首出规则
+- 可用牌型
+- 牌点大小顺序
+- 混牌或万能牌
+- 进贡
+- 还贡
+- 抗贡
+- 接风
+- 单局结算方式
+- 积分计算方式
 
-When in doubt, implement a conservative simplified rule engine and expose clear UI text saying the current version is a prototype.
+如果规则细节没有确认，优先实现保守的简化规则引擎，并在界面和文档中明确当前版本是原型。
 
-## Current Implementation Scope
+## 当前实现范围
 
-The current Flutter code implements a playable prototype, not a complete local-rule simulator.
+当前 Flutter 代码实现的是可试玩原型，不是完整地方规则模拟器。
 
-Implemented:
+已经实现：
 
-- Flutter root project
-- Home screen
-- Rule selection screen
-- Six-seat table screen
-- Team A / Team B seat colors
-- User seated at the bottom
-- Two-deck dealing
-- User hand display
-- Card selection
-- Hint
-- Play
-- Pass
-- Simplified AI turns
-- Simplified combination recognition:
-  - Single
-  - Pair
-  - Triple
-  - Bomb
-  - Joker pair
-- Simplified finish-order tracking
-- Simplified round result dialog
-- GitHub Actions APK build
+- Flutter 根目录项目。
+- 首页。
+- 规则选择页。
+- 六人牌桌页。
+- A 队 / B 队座位颜色。
+- 用户固定坐在底部。
+- 两副牌发牌。
+- 用户手牌展示。
+- 选牌。
+- 提示。
+- 出牌。
+- 过牌。
+- 简化 AI 自动出牌。
+- 简化牌型识别：
+  - 单张
+  - 对子
+  - 三张
+  - 炸弹
+  - 王炸
+- 简化出完顺序记录。
+- 简化单局结算弹层。
+- GitHub Actions APK 构建。
 
-Not yet fully implemented:
+尚未完整实现：
 
-- Complete Tianjin rules
-- Complete Tanggu rules
-- Tribute / return tribute / anti-tribute flow
-- Follow-lead / 接风 flow
-- Wild-card or mixed-card rules
-- Online multiplayer
-- Room creation and join flow
-- Persistent scoreboard
-- Custom card art
-- Production Android package metadata, app icon, signing, and release config
+- 完整天津规则。
+- 完整塘沽路规则。
+- 进贡、还贡、抗贡流程。
+- 接风流程。
+- 混牌或万能牌规则。
+- 在线多人。
+- 创建房间和加入房间。
+- 持久化总战绩。
+- 自定义扑克牌美术。
+- 正式 Android 包名、图标、签名和发版配置。
 
-## Flutter / Build Notes
+## Flutter 与构建
 
-The project is a Flutter root project. Do not create a nested Flutter app directory.
+本项目是 Flutter 根目录项目，不要再创建嵌套的 Flutter 应用目录。
 
-Recommended CI version:
+CI 推荐版本：
 
 - Flutter `3.41.9`
 - Dart `3.11.5`
 
-Relevant files:
+关键文件：
 
 - `pubspec.yaml`
 - `lib/main.dart`
@@ -134,7 +140,7 @@ Relevant files:
 - `docs/app-ui-prototype.md`
 - `.github/workflows/build-doorsix-apk.yml`
 
-Run checks when Flutter is available:
+Flutter 可用时运行：
 
 ```bash
 flutter pub get
@@ -142,29 +148,30 @@ flutter analyze
 flutter test
 ```
 
-## Coding Guidance
+## 编码约定
 
-- Keep the app rooted at `/Users/wyn/code/DoorSix`.
-- Prefer small, readable Flutter widgets over large monolithic files.
-- Keep card-game logic in `lib/services/rule_engine.dart` or dedicated services.
-- Keep data structures in `lib/models/`.
-- Keep visual table components in `lib/widgets/`.
-- Do not silently change core rule assumptions; update docs when gameplay changes.
-- Do not present the simplified rule engine as complete Tianjin/Tanggu rules.
-- Preserve rule configurability where practical.
+- 项目根目录固定为 `/Users/wyn/code/DoorSix`。
+- 不要创建 `DoorSixApp/`、`TimerFlow/` 这类应用子目录。
+- 优先拆分小而清晰的 Flutter 组件，避免页面文件无限膨胀。
+- 牌局规则逻辑放在 `lib/services/rule_engine.dart` 或新的 service 文件中。
+- 数据结构放在 `lib/models/`。
+- 牌桌视觉组件放在 `lib/widgets/`。
+- 修改核心玩法假设时，必须同步更新文档。
+- 不要把当前简化规则引擎描述成完整天津或塘沽路规则。
+- 能保留规则配置能力时，优先保留配置能力。
 
-## Product Direction
+## 产品方向
 
-The near-term product should be a clear, usable single-player practice table:
+近期目标是做一个清晰、可用的单机练习桌：
 
-- Open app
-- Choose rule version
-- Enter six-player table
-- Play against simple AI
-- Understand teammates and opponents at a glance
-- See current table combo and turn owner
-- Select cards at the bottom
-- Play, pass, or use hint
-- See finishing order and round result
+- 打开 App。
+- 选择规则版本。
+- 进入六人牌桌。
+- 与简化 AI 对局。
+- 一眼看清队友和对手。
+- 看清当前桌面牌型和当前出牌者。
+- 在底部选择手牌。
+- 可以出牌、过牌或使用提示。
+- 可以看到出完顺序和单局结果。
 
-Online multiplayer and full local-rule fidelity come after the base table interaction feels stable.
+在线多人和完整地方规则细节，应在基础牌桌体验稳定之后继续推进。

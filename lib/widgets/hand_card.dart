@@ -3,6 +3,7 @@ import 'package:playing_cards/playing_cards.dart' as pc;
 
 import '../models/card_model.dart';
 import '../utils/app_theme.dart';
+import '../utils/card_display_settings.dart';
 
 class HandCard extends StatelessWidget {
   const HandCard({
@@ -26,8 +27,10 @@ class HandCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cardWidth = width ?? (compact ? 40.0 : 48.0);
-    final cardHeight = height ?? (compact ? 58.0 : 70.0);
+    final metrics = CardDisplaySettingsScope.of(context).metrics;
+    final cardWidth = width ?? (compact ? metrics.compactWidth : metrics.width);
+    final cardHeight =
+        height ?? (compact ? metrics.compactHeight : metrics.height);
     const cardRadius = 5.0;
 
     return GestureDetector(
@@ -38,9 +41,10 @@ class HandCard extends StatelessWidget {
         width: cardWidth,
         height: cardHeight,
         margin: EdgeInsets.only(
-          right: trailingMargin ?? (compact ? 4 : 6),
-          top: showSelectionOffset && !card.selected ? 14 : 0,
-          bottom: showSelectionOffset && card.selected ? 14 : 0,
+          right: trailingMargin ?? (compact ? 4 : 6) * metrics.scale,
+          top: showSelectionOffset && !card.selected ? 14 * metrics.scale : 0,
+          bottom:
+              showSelectionOffset && card.selected ? 14 * metrics.scale : 0,
         ),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(cardRadius),

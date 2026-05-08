@@ -15,6 +15,7 @@ import '../services/rule_engine.dart';
 import '../services/server_log_store.dart';
 import '../utils/app_theme.dart';
 import '../widgets/action_bar.dart';
+import '../widgets/card_display_settings_sheet.dart';
 import '../widgets/game_table_layout.dart';
 import '../widgets/hand_area.dart';
 import '../widgets/server_log_sheet.dart';
@@ -35,8 +36,6 @@ class OnlineRoomPage extends StatefulWidget {
 }
 
 class _OnlineRoomPageState extends State<OnlineRoomPage> {
-  static const int _turnDurationSeconds = 10;
-
   final DoorSixBackendClient _client = DoorSixBackendClient();
   final RuleEngine _engine = const RuleEngine();
   final TextEditingController _nicknameController =
@@ -275,6 +274,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
               onBack: _handleBackRequest,
               onRefresh: _syncState,
               onLogs: _showCombinedLogs,
+              onSettings: () => showCardDisplaySettingsSheet(context),
             ),
             if (isLandscape)
               Expanded(
@@ -347,7 +347,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
         if (seat != currentSeat || snapshot.status != 'playing') {
           return null;
         }
-        return _turnSecondsRemaining ?? _turnDurationSeconds;
+        return _turnSecondsRemaining ?? snapshot.turnDurationSeconds;
       },
       centerBuilder: (context, width) {
         return TableCenter(
@@ -624,7 +624,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     final remainingMs = deadline - nowMs;
     return (remainingMs / 1000)
         .ceil()
-        .clamp(0, _turnDurationSeconds)
+        .clamp(0, snapshot.turnDurationSeconds)
         .toInt();
   }
 
@@ -956,6 +956,7 @@ class _CompactTableHeader extends StatelessWidget {
     required this.onBack,
     required this.onRefresh,
     required this.onLogs,
+    required this.onSettings,
   });
 
   final String roomCode;
@@ -965,6 +966,7 @@ class _CompactTableHeader extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onRefresh;
   final VoidCallback onLogs;
+  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -999,6 +1001,7 @@ class _CompactTableHeader extends StatelessWidget {
             child: _ToolStrip(
               onRefresh: onRefresh,
               onLogs: onLogs,
+              onSettings: onSettings,
             ),
           ),
         ],
@@ -1011,10 +1014,12 @@ class _ToolStrip extends StatelessWidget {
   const _ToolStrip({
     required this.onRefresh,
     required this.onLogs,
+    required this.onSettings,
   });
 
   final VoidCallback onRefresh;
   final VoidCallback onLogs;
+  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -1038,6 +1043,11 @@ class _ToolStrip extends StatelessWidget {
               tooltip: '日志 / 控制台',
               onPressed: onLogs,
               icon: const Icon(Icons.terminal_rounded),
+            ),
+            IconButton(
+              tooltip: '配置',
+              onPressed: onSettings,
+              icon: const Icon(Icons.settings_outlined),
             ),
           ],
         ),

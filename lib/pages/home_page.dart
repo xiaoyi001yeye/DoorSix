@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../models/rule_set.dart';
 import '../services/online_table_service.dart';
 import '../utils/app_theme.dart';
+import '../widgets/card_display_settings_sheet.dart';
 import '../widgets/server_log_sheet.dart';
 
 class HomePage extends StatefulWidget {
@@ -56,11 +57,6 @@ class _HomePageState extends State<HomePage> {
                           '砸六家',
                           style: Theme.of(context).textTheme.headlineLarge,
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '天津六人两队扑克',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
                       ],
                     ),
                   ),
@@ -77,7 +73,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   IconButton(
                     tooltip: '设置',
-                    onPressed: () => _showComingSoon(context, '设置'),
+                    onPressed: () => showCardDisplaySettingsSheet(context),
                     icon: const Icon(Icons.settings_outlined),
                   ),
                 ],
@@ -135,12 +131,6 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
-    );
-  }
-
-  void _showComingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature 会在牌桌原型稳定后补上')),
     );
   }
 

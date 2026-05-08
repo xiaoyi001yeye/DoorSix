@@ -27,3 +27,4 @@ flutter:
     - assets/images/
     - assets/sound/
     - assets/config/rules/
+    - server/config/game_settings.json

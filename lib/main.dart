@@ -9,9 +9,13 @@ import 'pages/online_room_page.dart';
 import 'pages/rule_select_page.dart';
 import 'pages/scoreboard_page.dart';
 import 'utils/app_theme.dart';
+import 'utils/card_display_settings.dart';
+import 'utils/game_runtime_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await GameRuntimeConfig.load();
+  await CardDisplaySettings.instance.load();
   await SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -63,11 +67,24 @@ class DoorSixApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'DoorSix',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.theme,
-      routerConfig: _router,
+    return CardDisplaySettingsScope(
+      settings: CardDisplaySettings.instance,
+      child: MaterialApp.router(
+        title: 'DoorSix',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.theme,
+        routerConfig: _router,
+        builder: (context, child) {
+          final settings = CardDisplaySettingsScope.of(context);
+          final mediaQuery = MediaQuery.of(context);
+          return MediaQuery(
+            data: mediaQuery.copyWith(
+              textScaler: TextScaler.linear(settings.fontScale),
+            ),
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
+      ),
     );
   }
 }

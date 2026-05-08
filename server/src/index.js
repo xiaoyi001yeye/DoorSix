@@ -14,10 +14,12 @@ const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}
 const REDIS_URL = process.env.REDIS_URL || '';
 const ROOM_TTL_SECONDS = Number(process.env.ROOM_TTL_SECONDS || 7200);
 const MATCH_LOG_DIR = process.env.MATCH_LOG_DIR || path.join(process.cwd(), 'logs', 'matches');
+const GAME_SETTINGS = require('../config/game_settings.json');
 
 const RULE_SET_ID = 'zha_liujia_tianjin_basic_v1';
 const MAX_PLAYERS = 6;
-const TURN_TIMEOUT_MS = 10000;
+const TURN_DURATION_SECONDS = GAME_SETTINGS.turnDurationSeconds;
+const TURN_TIMEOUT_MS = TURN_DURATION_SECONDS * 1000;
 const AI_MIN_DELAY_MS = 3000;
 const AI_MAX_DELAY_MS = 8000;
 const TEAM_BY_SEAT = ['B', 'A', 'B', 'A', 'B', 'A'];
@@ -361,6 +363,7 @@ function tableStateFor(state) {
     ruleSetId: RULE_SET_ID,
     ownerPlayerId: state.room.ownerPlayerId,
     currentTurnSeatIndex: state.game.currentTurnSeatIndex,
+    turnDurationSeconds: TURN_DURATION_SECONDS,
     turnStartedAt: state.game.turnStartedAt,
     turnDeadlineAt: state.game.turnDeadlineAt,
     lastPlayedSeatIndex: state.game.lastPlayedSeatIndex,

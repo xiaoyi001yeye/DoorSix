@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../models/card_model.dart';
 import '../services/rule_engine.dart';
 import '../utils/app_theme.dart';
+import '../utils/card_display_settings.dart';
 import 'hand_card.dart';
 
 class TableCenter extends StatelessWidget {
@@ -26,8 +27,10 @@ class TableCenter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final comboText = activeCombo == null ? '新一轮，可任意出牌' : activeCombo!.label;
+    final comboText =
+        activeCombo == null ? '新一轮，可任意出牌' : activeCombo!.label;
     final byText = lastPlayedBy == null ? '等待首出' : '上手：$lastPlayedBy';
+    final metrics = CardDisplaySettingsScope.of(context).metrics;
 
     return Container(
       width: width,
@@ -59,18 +62,32 @@ class TableCenter extends StatelessWidget {
               duration: const Duration(milliseconds: 220),
               child: SizedBox(
                 key: ValueKey(playedCards.map((card) => card.id).join(',')),
-                height: 60,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (final card in playedCards)
-                      HandCard(
-                        card: card.copyWith(selected: false),
-                        compact: true,
-                        showSelectionOffset: false,
-                        onTap: () {},
+                height: metrics.height,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minWidth: constraints.maxWidth,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            for (final card in playedCards)
+                              HandCard(
+                                card: card.copyWith(selected: false),
+                                width: metrics.width,
+                                height: metrics.height,
+                                showSelectionOffset: false,
+                                onTap: () {},
+                              ),
+                          ],
+                        ),
                       ),
-                  ],
+                    );
+                  },
                 ),
               ),
             ),

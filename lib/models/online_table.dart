@@ -123,6 +123,7 @@ class OnlineTableSnapshot {
     required this.seats,
     required this.finishOrder,
     required this.score,
+    required this.turnDurationSeconds,
     required this.myHand,
     required this.eventSeq,
     required this.actionHistory,
@@ -143,6 +144,7 @@ class OnlineTableSnapshot {
   final List<OnlineSeat?> seats;
   final List<FinishedSeat> finishOrder;
   final OnlineScore score;
+  final int turnDurationSeconds;
   final List<CardInstance> myHand;
   final int eventSeq;
   final List<OnlineActionHistoryEntry> actionHistory;
@@ -182,6 +184,8 @@ class OnlineTableSnapshot {
         );
       }).toList(),
       score: OnlineScore.fromJson(table['score'] as Map<String, dynamic>?),
+      turnDurationSeconds: table['turnDurationSeconds'] as int? ??
+          _turnDurationFromDeadline(table),
       myHand: (json['myHand'] as List<dynamic>? ?? const [])
           .map((card) => _cardFromJson(card as Map<String, dynamic>))
           .toList(),
@@ -196,6 +200,15 @@ class OnlineTableSnapshot {
       serverTime: json['serverTime'] as int?,
     );
   }
+}
+
+int _turnDurationFromDeadline(Map<String, dynamic> table) {
+  final startedAt = table['turnStartedAt'] as int?;
+  final deadlineAt = table['turnDeadlineAt'] as int?;
+  if (startedAt == null || deadlineAt == null || deadlineAt <= startedAt) {
+    return 0;
+  }
+  return ((deadlineAt - startedAt) / 1000).ceil();
 }
 
 enum OnlineActionType {

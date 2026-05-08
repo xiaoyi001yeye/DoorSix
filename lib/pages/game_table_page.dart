@@ -11,7 +11,9 @@ import '../models/round_result.dart';
 import '../models/rule_set.dart';
 import '../services/rule_engine.dart';
 import '../utils/app_theme.dart';
+import '../utils/game_runtime_config.dart';
 import '../widgets/action_bar.dart';
+import '../widgets/card_display_settings_sheet.dart';
 import '../widgets/game_table_layout.dart';
 import '../widgets/hand_area.dart';
 import '../widgets/rule_badge.dart';
@@ -30,8 +32,6 @@ class GameTablePage extends StatefulWidget {
 }
 
 class _GameTablePageState extends State<GameTablePage> {
-  static const int _turnDurationSeconds = 10;
-
   final RuleEngine _engine = const RuleEngine();
   final math.Random _aiRandom = math.Random();
   final List<String> _logs = [];
@@ -49,7 +49,7 @@ class _GameTablePageState extends State<GameTablePage> {
   int _teamAScore = 0;
   int _teamBScore = 0;
   bool _aiRunning = false;
-  int _turnSecondsRemaining = _turnDurationSeconds;
+  int _turnSecondsRemaining = GameRuntimeConfig.instance.turnDurationSeconds;
   Timer? _turnTimer;
   RoundResult? _roundResult;
 
@@ -157,6 +157,7 @@ class _GameTablePageState extends State<GameTablePage> {
       onBack: _handleBackRequest,
       onRuleTap: _showRuleSheet,
       onLogTap: _showLogSheet,
+      onSettingsTap: () => showCardDisplaySettingsSheet(context),
     );
   }
 
@@ -265,7 +266,7 @@ class _GameTablePageState extends State<GameTablePage> {
     _lastPlayedCards = [];
     _lastPlayedSeat = null;
     _currentSeat = _findFirstLeadSeat(hands);
-    _turnSecondsRemaining = _turnDurationSeconds;
+    _turnSecondsRemaining = GameRuntimeConfig.instance.turnDurationSeconds;
     _passCount = 0;
     _logs
       ..clear()
@@ -456,7 +457,7 @@ class _GameTablePageState extends State<GameTablePage> {
     }
 
     void resetSeconds() {
-      _turnSecondsRemaining = _turnDurationSeconds;
+      _turnSecondsRemaining = GameRuntimeConfig.instance.turnDurationSeconds;
     }
 
     if (notify && mounted) {
@@ -775,6 +776,7 @@ class _TableHeader extends StatelessWidget {
     required this.onBack,
     required this.onRuleTap,
     required this.onLogTap,
+    required this.onSettingsTap,
   });
 
   final RuleSet ruleSet;
@@ -784,6 +786,7 @@ class _TableHeader extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onRuleTap;
   final VoidCallback onLogTap;
+  final VoidCallback onSettingsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -829,6 +832,11 @@ class _TableHeader extends StatelessWidget {
             tooltip: '牌局记录',
             onPressed: onLogTap,
             icon: const Icon(Icons.receipt_long_outlined),
+          ),
+          IconButton(
+            tooltip: '配置',
+            onPressed: onSettingsTap,
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),

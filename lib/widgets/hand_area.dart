@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/card_model.dart';
 import '../services/rule_engine.dart';
 import '../utils/app_theme.dart';
+import '../utils/card_display_settings.dart';
 import 'hand_card.dart';
 
 class HandArea extends StatelessWidget {
@@ -110,11 +111,12 @@ class _StackedHandScroller extends StatelessWidget {
       );
     }
 
-    const cardWidth = 52.0;
-    const cardHeight = 76.0;
-    const selectedLift = 18.0;
-    const minStep = 24.0;
-    const preferredStep = 36.0;
+    final metrics = CardDisplaySettingsScope.of(context).metrics;
+    final cardWidth = metrics.width;
+    final cardHeight = metrics.height;
+    final selectedLift = 18.0 * metrics.scale;
+    final minStep = 24.0 * metrics.scale;
+    final preferredStep = 36.0 * metrics.scale;
 
     return SizedBox(
       height: cardHeight + selectedLift,

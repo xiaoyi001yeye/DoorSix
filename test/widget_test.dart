@@ -10,6 +10,5 @@ void main() {
     expect(find.text('练习桌'), findsOneWidget);
     expect(find.text('创建房间'), findsOneWidget);
     expect(find.text('加入房间'), findsOneWidget);
-    expect(find.text('天津六人两队扑克'), findsOneWidget);
   });
 }

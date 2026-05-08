@@ -1,0 +1,896 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>云牌桌</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10201c;
+      --panel: #172b31;
+      --panel-2: #203a42;
+      --table: #17624f;
+      --table-dark: #0b332b;
+      --gold: #f4c45b;
+      --cyan: #4cc9f0;
+      --success: #79d98b;
+      --danger: #e85d5a;
+      --text: #f6f1e7;
+      --muted: #afc1bd;
+      --card: #f7f2e8;
+      --ink: #18221f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      min-height: 44px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 15px;
+      color: var(--ink);
+      background: var(--gold);
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      color: var(--text);
+      background: var(--panel-2);
+      border: 1px solid rgba(121, 217, 139, 0.24);
+    }
+
+    button.danger {
+      color: white;
+      background: var(--gold);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+    }
+
+    input {
+      width: 100%;
+      min-height: 48px;
+      border-radius: 8px;
+      border: 1px solid rgba(121, 217, 139, 0.22);
+      background: rgba(16, 32, 28, 0.86);
+      color: var(--text);
+      padding: 0 12px;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--gold);
+    }
+
+    .app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: max(12px, env(safe-area-inset-top)) 14px 10px;
+      border-bottom: 1px solid rgba(121, 217, 139, 0.14);
+      background: rgba(11, 51, 43, 0.92);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .server-traffic {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 0 9px;
+      border-radius: 8px;
+      border: 1px solid rgba(121, 217, 139, 0.18);
+      background: rgba(23, 43, 49, 0.82);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .server-traffic:hover {
+      border-color: rgba(244, 196, 91, 0.44);
+    }
+
+    .lights {
+      display: inline-flex;
+      gap: 4px;
+    }
+
+    .light {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      opacity: 0.2;
+    }
+
+    .light.red {
+      background: var(--danger);
+    }
+
+    .light.yellow {
+      background: var(--gold);
+    }
+
+    .light.green {
+      background: var(--success);
+    }
+
+    .light.on {
+      opacity: 1;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    main {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+      padding: 14px;
+      flex: 1;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(76, 201, 240, 0.18);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: 0 18px 34px rgba(0, 0, 0, 0.18);
+    }
+
+    .entry {
+      max-width: 520px;
+      margin: 8vh auto 0;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 28px 14px 22px;
+      border-radius: 8px;
+      background: radial-gradient(ellipse at center, rgba(31, 138, 104, 0.98), rgba(23, 98, 79, 0.82) 48%, rgba(11, 51, 43, 0.9) 82%);
+      border: 1px solid rgba(76, 201, 240, 0.24);
+      margin-bottom: 14px;
+    }
+
+    .hero h2 {
+      margin: 0 0 10px;
+      font-size: clamp(42px, 12vw, 74px);
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+      font-weight: 700;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .actions > * {
+      flex: 1 1 150px;
+    }
+
+    .room-head {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .room-code {
+      font-size: 34px;
+      color: var(--gold);
+      font-weight: 950;
+      letter-spacing: 3px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .seat {
+      min-height: 78px;
+      border-radius: 8px;
+      padding: 10px;
+      background: rgba(16, 32, 28, 0.54);
+      border: 1px solid rgba(76, 201, 240, 0.18);
+    }
+
+    .seat.current {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 1px rgba(244, 196, 91, 0.28);
+    }
+
+    .seat.mine {
+      border-color: var(--cyan);
+    }
+
+    .seat-name {
+      font-weight: 900;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .seat-meta {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .table-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 12px;
+      min-height: calc(100vh - 84px);
+    }
+
+    .table {
+      min-height: 520px;
+      display: grid;
+      align-content: space-between;
+      gap: 12px;
+      background: radial-gradient(ellipse at center, rgba(31, 138, 104, 0.96), rgba(23, 98, 79, 0.82) 45%, rgba(11, 51, 43, 0.94) 82%);
+    }
+
+    .center {
+      align-self: center;
+      justify-self: center;
+      width: min(420px, 100%);
+      text-align: center;
+      padding: 14px;
+      border-radius: 8px;
+      background: rgba(11, 51, 43, 0.82);
+      border: 1px solid rgba(121, 217, 139, 0.24);
+    }
+
+    .combo {
+      font-size: 20px;
+      font-weight: 950;
+      margin-bottom: 10px;
+    }
+
+    .played {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .side {
+      display: grid;
+      gap: 12px;
+      align-content: end;
+    }
+
+    .hand {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 4px 2px 12px;
+      min-height: 128px;
+      align-items: end;
+    }
+
+    .card {
+      flex: 0 0 auto;
+      width: 58px;
+      height: 84px;
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--ink);
+      border: 1px solid rgba(0, 0, 0, 0.22);
+      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.22);
+      padding: 6px;
+      display: grid;
+      align-content: space-between;
+      text-align: left;
+      font-weight: 950;
+      user-select: none;
+    }
+
+    .card.small {
+      width: 42px;
+      height: 60px;
+      padding: 4px;
+      font-size: 12px;
+    }
+
+    .card.selected {
+      transform: translateY(-16px);
+      outline: 3px solid var(--gold);
+    }
+
+    .card.red {
+      color: #c82127;
+    }
+
+    .card .bottom {
+      justify-self: end;
+      transform: rotate(180deg);
+    }
+
+    .log {
+      max-height: 150px;
+      overflow: auto;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(18px + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      width: min(520px, calc(100% - 28px));
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: rgba(32, 58, 66, 0.98);
+      border: 1px solid rgba(244, 196, 91, 0.35);
+      color: var(--text);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 160ms ease;
+      z-index: 20;
+      font-weight: 800;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 860px) {
+      main {
+        padding: 10px;
+      }
+
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .table-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .table {
+        min-height: 420px;
+      }
+
+      .side {
+        align-content: start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>云牌桌</h1>
+      <button id="serverTraffic" class="server-traffic" type="button" title="点击刷新服务器状态">
+        <span class="lights" aria-hidden="true">
+          <span class="light red"></span>
+          <span class="light yellow on"></span>
+          <span class="light green"></span>
+        </span>
+        <span id="serverStatusText">检测中</span>
+      </button>
+    </header>
+
+    <main>
+      <section id="entryView" class="entry">
+        <div class="hero">
+          <h2>云牌桌</h2>
+          <p>用浏览器加入 DoorSix 牌桌。</p>
+        </div>
+        <div class="panel">
+          <label class="field">
+            昵称
+            <input id="nicknameInput" maxlength="16" placeholder="输入你的昵称" value="玩家">
+          </label>
+          <label class="field">
+            房间号
+            <input id="roomCodeInput" inputmode="numeric" maxlength="6" placeholder="加入房间时填写">
+          </label>
+          <div class="actions">
+            <button id="createBtn">创建房间</button>
+            <button id="joinBtn" class="secondary">加入房间</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="waitingView" class="hidden">
+        <div class="panel">
+          <div class="room-head">
+            <div>
+              <div class="seat-meta">房间号</div>
+              <div id="waitingRoomCode" class="room-code">------</div>
+            </div>
+            <button id="copyRoomBtn" class="secondary">复制房间号</button>
+            <button id="leaveWaitingBtn" class="danger">离开</button>
+          </div>
+          <div id="waitingSeats" class="grid"></div>
+          <div class="actions" style="margin-top: 14px;">
+            <button id="readyBtn" class="secondary">准备</button>
+            <button id="startBtn">开局</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="gameView" class="hidden">
+        <div class="table-layout">
+          <div class="panel table">
+            <div>
+              <div id="gameSummary" class="seat-meta"></div>
+              <div id="gameSeats" class="grid"></div>
+            </div>
+            <div class="center">
+              <div id="comboText" class="combo">等待出牌</div>
+              <div id="playedCards" class="played"></div>
+              <div id="turnText" class="seat-meta"></div>
+            </div>
+          </div>
+          <aside class="side">
+            <div class="panel">
+              <div class="room-head">
+                <div>
+                  <div class="seat-meta">我的手牌</div>
+                  <strong id="handCount">0 张</strong>
+                </div>
+                <button id="leaveGameBtn" class="danger">离开</button>
+              </div>
+              <div id="hand" class="hand"></div>
+              <div class="actions">
+                <button id="playBtn">出牌</button>
+                <button id="passBtn" class="secondary">过牌</button>
+                <button id="clearBtn" class="secondary">取消选择</button>
+              </div>
+            </div>
+            <div class="panel log" id="log"></div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const els = {
+      serverTraffic: document.querySelector('#serverTraffic'),
+      serverStatusText: document.querySelector('#serverStatusText'),
+      entryView: document.querySelector('#entryView'),
+      waitingView: document.querySelector('#waitingView'),
+      gameView: document.querySelector('#gameView'),
+      nicknameInput: document.querySelector('#nicknameInput'),
+      roomCodeInput: document.querySelector('#roomCodeInput'),
+      createBtn: document.querySelector('#createBtn'),
+      joinBtn: document.querySelector('#joinBtn'),
+      waitingRoomCode: document.querySelector('#waitingRoomCode'),
+      waitingSeats: document.querySelector('#waitingSeats'),
+      copyRoomBtn: document.querySelector('#copyRoomBtn'),
+      leaveWaitingBtn: document.querySelector('#leaveWaitingBtn'),
+      readyBtn: document.querySelector('#readyBtn'),
+      startBtn: document.querySelector('#startBtn'),
+      gameSummary: document.querySelector('#gameSummary'),
+      gameSeats: document.querySelector('#gameSeats'),
+      comboText: document.querySelector('#comboText'),
+      playedCards: document.querySelector('#playedCards'),
+      turnText: document.querySelector('#turnText'),
+      handCount: document.querySelector('#handCount'),
+      hand: document.querySelector('#hand'),
+      playBtn: document.querySelector('#playBtn'),
+      passBtn: document.querySelector('#passBtn'),
+      clearBtn: document.querySelector('#clearBtn'),
+      leaveGameBtn: document.querySelector('#leaveGameBtn'),
+      log: document.querySelector('#log'),
+      toast: document.querySelector('#toast'),
+    };
+
+    let session = null;
+    let snapshot = null;
+    let socket = null;
+    let seq = 0;
+    const selected = new Set();
+    const logs = [];
+
+    const storageKey = 'doorsix_cloud_table_session';
+    const apiOrigin = location.protocol === 'file:' ? 'http://39.104.67.175' : '';
+    const suitLabels = { spades: '黑桃', hearts: '红桃', diamonds: '方块', clubs: '梅花', joker: '' };
+    const suitMarks = { spades: '♠', hearts: '♥', diamonds: '♦', clubs: '♣', joker: '★' };
+    const rankLabels = {
+      J: 'J',
+      Q: 'Q',
+      K: 'K',
+      A: 'A',
+      small_joker: '小王',
+      big_joker: '大王',
+    };
+
+    function toast(message) {
+      els.toast.textContent = message;
+      els.toast.classList.add('show');
+      clearTimeout(toast.timer);
+      toast.timer = setTimeout(() => els.toast.classList.remove('show'), 2200);
+    }
+
+    function log(message) {
+      logs.unshift(`${new Date().toLocaleTimeString()} ${message}`);
+      logs.splice(40);
+      els.log.innerHTML = logs.map((item) => `<div>${escapeHtml(item)}</div>`).join('');
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[char]));
+    }
+
+    function api(path, options = {}) {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      };
+      if (session?.playerToken) {
+        headers['x-player-token'] = session.playerToken;
+      }
+      return fetch(`${apiOrigin}${path}`, {
+        ...options,
+        headers,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      }).then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (!response.ok || data?.success === false) {
+          throw new Error(data?.error?.message || `请求失败 ${response.status}`);
+        }
+        return data.data;
+      });
+    }
+
+    function saveSession() {
+      if (session) {
+        localStorage.setItem(storageKey, JSON.stringify(session));
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    }
+
+    function selfSeat() {
+      const seats = snapshot?.tableState?.seats || [];
+      return seats.find((seat) => seat && seat.playerId === session?.self?.playerId) || null;
+    }
+
+    function currentSeat() {
+      const table = snapshot?.tableState;
+      return table?.seats?.[table.currentTurnSeatIndex] || null;
+    }
+
+    function isMyTurn() {
+      const table = snapshot?.tableState;
+      return table?.status === 'playing' && table.currentTurnSeatIndex === selfSeat()?.seatIndex;
+    }
+
+    function setServerStatus(status) {
+      const labels = {
+        checking: '检测中',
+        available: '服务器可用',
+        busy: '服务器忙',
+        down: '服务器不可用',
+      };
+      const active = {
+        checking: 'yellow',
+        available: 'green',
+        busy: 'yellow',
+        down: 'red',
+      }[status];
+      els.serverStatusText.textContent = labels[status] || labels.down;
+      els.serverTraffic.querySelectorAll('.light').forEach((light) => {
+        light.classList.toggle('on', light.classList.contains(active));
+      });
+      els.serverTraffic.title = `${els.serverStatusText.textContent}，点击刷新`;
+    }
+
+    async function checkServerHealth() {
+      setServerStatus('checking');
+      try {
+        const response = await fetch(`${apiOrigin}/health`, { cache: 'no-store' });
+        if (!response.ok) {
+          setServerStatus(response.status >= 500 ? 'down' : 'busy');
+          return;
+        }
+        const data = await response.json();
+        setServerStatus(data?.ok ? 'available' : 'busy');
+      } catch (_) {
+        setServerStatus('down');
+      }
+    }
+
+    function show(view) {
+      els.entryView.classList.toggle('hidden', view !== 'entry');
+      els.waitingView.classList.toggle('hidden', view !== 'waiting');
+      els.gameView.classList.toggle('hidden', view !== 'game');
+    }
+
+    function connectSocket() {
+      if (!session?.webSocketUrl) return;
+      if (socket) socket.close();
+      socket = new WebSocket(session.webSocketUrl);
+      socket.addEventListener('open', () => {
+        sendWs('sync_state', {});
+        log('已连接牌桌');
+      });
+      socket.addEventListener('close', () => {
+        log('连接已断开');
+      });
+      socket.addEventListener('message', (event) => {
+        const message = JSON.parse(event.data);
+        if (message.type === 'error') {
+          toast(message.payload?.message || '操作失败');
+          return;
+        }
+        if (message.payload?.tableState) {
+          applySnapshot(message.payload);
+          return;
+        }
+        if (['player_joined', 'player_left', 'seat_updated', 'player_reconnected'].includes(message.type)) {
+          sendWs('sync_state', {});
+        }
+      });
+    }
+
+    function sendWs(type, payload = {}) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        toast('牌桌连接还没准备好');
+        return;
+      }
+      seq += 1;
+      socket.send(JSON.stringify({
+        type,
+        requestId: `web_${Date.now()}_${seq}`,
+        roomId: session.room.roomId,
+        seq,
+        payload,
+      }));
+    }
+
+    function applySnapshot(next) {
+      snapshot = next;
+      selected.forEach((id) => {
+        if (!snapshot.myHand.some((card) => card.cardId === id)) selected.delete(id);
+      });
+      render();
+    }
+
+    function render() {
+      if (!session || !snapshot) {
+        show('entry');
+        return;
+      }
+      const table = snapshot.tableState;
+      if (table.status === 'waiting') {
+        show('waiting');
+        renderWaiting();
+      } else {
+        show('game');
+        renderGame();
+      }
+    }
+
+    function renderWaiting() {
+      const table = snapshot.tableState;
+      els.waitingRoomCode.textContent = session.room.roomCode;
+      els.waitingSeats.innerHTML = renderSeats(table);
+      const mine = selfSeat();
+      els.readyBtn.textContent = mine?.ready ? '取消准备' : '准备';
+      els.startBtn.disabled = session.self.playerId !== table.ownerPlayerId;
+    }
+
+    function renderGame() {
+      const table = snapshot.tableState;
+      const current = currentSeat();
+      els.gameSummary.textContent = `房间 ${session.room.roomCode} · 第 ${table.roundNo} 局 · A ${table.score?.teamA ?? 0}:${table.score?.teamB ?? 0} B`;
+      els.gameSeats.innerHTML = renderSeats(table);
+      els.comboText.textContent = table.tableCombo?.label || '新一轮，可任意出牌';
+      els.playedCards.innerHTML = (table.tableCombo?.cards || [])
+        .map((card) => cardHtml(card, true))
+        .join('');
+      els.turnText.textContent = table.status === 'settled'
+        ? '本局已结束'
+        : `当前轮到：${current?.nickname || '-'}${isMyTurn() ? '（你）' : ''}`;
+      els.handCount.textContent = `${snapshot.myHand.length} 张`;
+      els.hand.innerHTML = snapshot.myHand.map((card) => cardHtml(card, false)).join('');
+      els.playBtn.disabled = !isMyTurn() || selected.size === 0;
+      els.passBtn.disabled = !isMyTurn() || !table.tableCombo;
+    }
+
+    function renderSeats(table) {
+      return Array.from({ length: 6 }, (_, index) => {
+        const seat = table.seats?.[index];
+        if (!seat) {
+          return `<div class="seat"><div class="seat-name">${index + 1} 号位</div><div class="seat-meta">空位</div></div>`;
+        }
+        const mine = seat.playerId === session.self.playerId;
+        const current = table.currentTurnSeatIndex === index;
+        const state = table.status === 'waiting'
+          ? (seat.ready ? '已准备' : '未准备')
+          : `余牌 ${seat.cardCount ?? 0}${seat.finishRank ? ` · 第 ${seat.finishRank} 名` : ''}`;
+        return `
+          <div class="seat ${mine ? 'mine' : ''} ${current ? 'current' : ''}">
+            <div class="seat-name">${escapeHtml(seat.nickname)}${mine ? '（我）' : ''}</div>
+            <div class="seat-meta">${seat.team} 队 · ${seat.isAi ? 'AI' : '玩家'}<br>${state}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function cardHtml(card, small) {
+      const rank = rankLabels[card.rank] || card.rank;
+      const mark = suitMarks[card.suit] || '';
+      const red = card.suit === 'hearts' || card.suit === 'diamonds';
+      const selectedClass = selected.has(card.cardId) ? ' selected' : '';
+      const title = `${suitLabels[card.suit] || ''}${rank}`;
+      return `
+        <div class="card ${small ? 'small' : ''} ${red ? 'red' : ''}${selectedClass}"
+          data-card-id="${card.cardId}" title="${escapeHtml(title)}">
+          <div>${escapeHtml(rank)} ${mark}</div>
+          <div class="bottom">${escapeHtml(rank)} ${mark}</div>
+        </div>
+      `;
+    }
+
+    async function createRoom() {
+      const nickname = els.nicknameInput.value.trim();
+      if (!nickname) return toast('先填昵称');
+      const data = await api('/api/v1/rooms', {
+        method: 'POST',
+        body: { nickname },
+      });
+      session = data;
+      saveSession();
+      connectSocket();
+      log(`房间 ${session.room.roomCode} 已创建`);
+    }
+
+    async function joinRoom() {
+      const nickname = els.nicknameInput.value.trim();
+      const roomCode = els.roomCodeInput.value.trim();
+      if (!nickname) return toast('先填昵称');
+      if (roomCode.length !== 6) return toast('房间号需要 6 位');
+      const data = await api(`/api/v1/rooms/by-code/${roomCode}/join`, {
+        method: 'POST',
+        body: { nickname },
+      });
+      session = data;
+      saveSession();
+      connectSocket();
+      log(`已加入房间 ${session.room.roomCode}`);
+    }
+
+    async function leaveRoom() {
+      if (!session) return;
+      try {
+        await api(`/api/v1/rooms/${session.room.roomId}/leave`, {
+          method: 'POST',
+          body: { reason: 'cloud_table_exit' },
+        });
+      } catch (_) {
+        // Leave should clear local state even if the room already disappeared.
+      }
+      if (socket) socket.close();
+      session = null;
+      snapshot = null;
+      selected.clear();
+      saveSession();
+      show('entry');
+    }
+
+    els.createBtn.addEventListener('click', () => createRoom().catch((error) => toast(error.message)));
+    els.joinBtn.addEventListener('click', () => joinRoom().catch((error) => toast(error.message)));
+    els.readyBtn.addEventListener('click', () => sendWs('ready', { ready: !selfSeat()?.ready }));
+    els.startBtn.addEventListener('click', () => sendWs('start_game', {}));
+    els.copyRoomBtn.addEventListener('click', () => {
+      navigator.clipboard?.writeText(session?.room?.roomCode || '');
+      toast('房间号已复制');
+    });
+    els.leaveWaitingBtn.addEventListener('click', () => leaveRoom());
+    els.leaveGameBtn.addEventListener('click', () => leaveRoom());
+    els.playBtn.addEventListener('click', () => {
+      sendWs('play_cards', { cardIds: Array.from(selected) });
+    });
+    els.passBtn.addEventListener('click', () => sendWs('pass', {}));
+    els.clearBtn.addEventListener('click', () => {
+      selected.clear();
+      render();
+    });
+    els.hand.addEventListener('click', (event) => {
+      const card = event.target.closest('[data-card-id]');
+      if (!card || !isMyTurn()) return;
+      const id = card.dataset.cardId;
+      if (selected.has(id)) {
+        selected.delete(id);
+      } else {
+        selected.add(id);
+      }
+      render();
+    });
+
+    (async function boot() {
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) {
+          session = JSON.parse(raw);
+          const data = await api(`/api/v1/rooms/${session.room.roomId}/snapshot`);
+          applySnapshot(data);
+          connectSocket();
+          return;
+        }
+      } catch (_) {
+        session = null;
+        snapshot = null;
+        saveSession();
+      }
+      show('entry');
+    }());
+    els.serverTraffic.addEventListener('click', () => checkServerHealth());
+    checkServerHealth();
+    setInterval(checkServerHealth, 15000);
+  </script>
+</body>
+</html>

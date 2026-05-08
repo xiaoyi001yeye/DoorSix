@@ -30,7 +30,7 @@ class RuleSet {
     enableTribute: false,
     enableFollowLead: false,
     enableWildCards: true,
-    summary: '1副牌，红桃4先出，大小王、3、2可作混儿',
+    summary: '1副牌，红桃4先出，逆时针出牌，大小王、3、2可作混儿',
   );
 
   static const tanggu = RuleSet(

@@ -72,6 +72,14 @@ void main() {
     expect(data['canonicalForProject'], isTrue);
     expect(data['deck'], containsPair('standardDeckCount', 1));
     expect(data['deck'], containsPair('cardsPerPlayer', 9));
+    expect(data['turns'], containsPair('direction', 'counterclockwise'));
+    expect(
+      data['turns'],
+      containsPair(
+        'ifLastPlayerFinishedAndAllOthersPass',
+        'nextCounterclockwiseActivePlayerLeads',
+      ),
+    );
     expect(
       data['comparison'],
       containsPair('crossKindBeatingAllowed', false),

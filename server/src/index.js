@@ -480,6 +480,10 @@ function beginTurn(state, seatIndex = state.game.currentTurnSeatIndex) {
   state.game.turnDeadlineAt = startedAt + TURN_TIMEOUT_MS;
 }
 
+function nextCounterclockwiseSeatIndex(seatIndex) {
+  return (seatIndex - 1 + MAX_PLAYERS) % MAX_PLAYERS;
+}
+
 function cardHistoryView(card) {
   return {
     cardId: card.cardId,
@@ -509,12 +513,29 @@ function recordAction(state, seat, actionType, options = {}) {
 }
 
 function advanceTurn(state) {
-  let next = (state.game.currentTurnSeatIndex + 1) % MAX_PLAYERS;
-  while (state.seats[next]?.finishRank != null) {
-    next = (next + 1) % MAX_PLAYERS;
-  }
+  const next = nextActiveSeatCounterclockwiseFrom(state, state.game.currentTurnSeatIndex);
   beginTurn(state, next);
   return next;
+}
+
+function nextActiveSeatCounterclockwiseFrom(state, seatIndex) {
+  let next = nextCounterclockwiseSeatIndex(seatIndex);
+  while (!state.seats[next] || state.seats[next].finishRank != null) {
+    next = nextCounterclockwiseSeatIndex(next);
+  }
+  return next;
+}
+
+function leadSeatAfterAllPasses(state) {
+  const leadSeat = state.game.lastPlayedSeatIndex;
+  if (!validateSeatIndex(leadSeat)) {
+    return nextActiveSeatCounterclockwiseFrom(state, state.game.currentTurnSeatIndex);
+  }
+  const leader = state.seats[leadSeat];
+  if (leader && leader.finishRank == null) {
+    return leadSeat;
+  }
+  return nextActiveSeatCounterclockwiseFrom(state, leadSeat);
 }
 
 function findFirstLeadSeat(handsBySeat) {
@@ -730,9 +751,10 @@ async function passTurn(state, seat, source = 'player') {
   let newLead = false;
   if (state.game.passCount >= activeSeats(state).length - 1) {
     newLead = true;
+    const leadSeat = leadSeatAfterAllPasses(state);
     state.game.tableCombo = null;
+    state.game.lastPlayedSeatIndex = null;
     state.game.passCount = 0;
-    const leadSeat = state.game.lastPlayedSeatIndex;
     beginTurn(state, leadSeat);
     const leader = state.seats[leadSeat];
     if (leader) {

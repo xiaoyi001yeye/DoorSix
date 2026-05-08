@@ -430,6 +430,7 @@ class _GameTablePageState extends State<GameTablePage> {
       _logs.add('${_players[seat].name} 过');
 
       if (_passCount >= _activePlayerCount - 1) {
+        final nextLeadSeat = _leadSeatAfterAllPasses(seat);
         _logs.add('一圈过牌，进入新一轮');
         _activeCombo = null;
         _lastPlayedCards = [];
@@ -440,9 +441,10 @@ class _GameTablePageState extends State<GameTablePage> {
               ? player.copyWith(status: PlayerStatus.waiting)
               : player;
         }).toList();
+        _setCurrentSeat(nextLeadSeat);
+      } else {
+        _advanceTurn();
       }
-
-      _advanceTurn();
     });
 
     HapticFeedback.selectionClick();
@@ -604,13 +606,34 @@ class _GameTablePageState extends State<GameTablePage> {
       return;
     }
 
-    var next = (_currentSeat + 1) % _players.length;
-    while (_players[next].finishRank != null) {
-      next = (next + 1) % _players.length;
+    _setCurrentSeat(_nextActiveSeatCounterclockwiseFrom(_currentSeat));
+  }
+
+  int _leadSeatAfterAllPasses(int fallbackSeat) {
+    final leadSeat = _lastPlayedSeat;
+    if (leadSeat == null) {
+      return _nextActiveSeatCounterclockwiseFrom(fallbackSeat);
     }
-    _currentSeat = next;
+
+    if (_players[leadSeat].finishRank == null) {
+      return leadSeat;
+    }
+
+    return _nextActiveSeatCounterclockwiseFrom(leadSeat);
+  }
+
+  int _nextActiveSeatCounterclockwiseFrom(int seat) {
+    var next = (seat - 1 + _players.length) % _players.length;
+    while (_players[next].finishRank != null) {
+      next = (next - 1 + _players.length) % _players.length;
+    }
+    return next;
+  }
+
+  void _setCurrentSeat(int seat) {
+    _currentSeat = seat;
     _players = _players.map((player) {
-      return player.seatIndex == next
+      return player.seatIndex == seat
           ? player.copyWith(status: PlayerStatus.thinking)
           : player;
     }).toList();

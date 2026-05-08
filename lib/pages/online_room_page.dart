@@ -1356,7 +1356,7 @@ class _ActionHistoryTile extends StatelessWidget {
       OnlineActionType.play =>
         '${entry.playerName} 出 ${entry.comboLabel ?? '牌'}',
       OnlineActionType.pass => '${entry.playerName} 过牌',
-      OnlineActionType.newLead => '一圈过牌，${entry.playerName} 重新领出',
+      OnlineActionType.newLead => '一圈过牌，${entry.playerName} 获得领出权',
     };
   }
 

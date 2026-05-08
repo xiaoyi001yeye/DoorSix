@@ -1124,7 +1124,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
       "label": "对子 K"
     },
     "remainingCardCount": 16,
-    "nextTurnSeatIndex": 1,
+    "nextTurnSeatIndex": 5,
     "passCount": 0,
     "finishRank": null
   }
@@ -1170,14 +1170,14 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
     "roundNo": 1,
     "seatIndex": 1,
     "playerId": "p_10002",
-    "nextTurnSeatIndex": 2,
+    "nextTurnSeatIndex": 0,
     "passCount": 1,
     "newLead": false
   }
 }
 ```
 
-如果一圈过牌后进入新一轮，服务端广播：
+如果一圈过牌后进入新一轮，服务端广播。领出权优先回到上一位出牌者；如果上一位出牌者已经出净，则由其逆时针方向的下一位未出净玩家任意出牌：
 
 ```json
 {

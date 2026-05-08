@@ -188,10 +188,11 @@
     "singleCardsCompareByNaturalRank": true
   },
   "turns": {
-    "direction": "clockwise",
+    "direction": "counterclockwise",
     "mayPassWhenFollowing": true,
     "mayPassWhenLeading": false,
-    "newTrickAfterAllOtherActivePlayersPass": true
+    "newTrickAfterAllOtherActivePlayersPass": true,
+    "ifLastPlayerFinishedAndAllOthersPass": "nextCounterclockwiseActivePlayerLeads"
   },
   "finish": {
     "firstOutLabel": "贡",

@@ -75,10 +75,13 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
   Widget build(BuildContext context) {
     final snapshot = _snapshot;
     final isGameView = snapshot != null && snapshot.status != 'waiting';
-    return WillPopScope(
-      onWillPop: () async {
-        await _handleBackRequest();
-        return false;
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          return;
+        }
+        unawaited(_handleBackRequest());
       },
       child: Scaffold(
         appBar: isGameView ? null : _buildRoomAppBar(),

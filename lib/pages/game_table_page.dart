@@ -84,10 +84,13 @@ class _GameTablePageState extends State<GameTablePage> {
     final lastPlayedBy =
         _lastPlayedSeat == null ? null : _players[_lastPlayedSeat!].name;
 
-    return WillPopScope(
-      onWillPop: () async {
-        await _handleBackRequest();
-        return false;
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          return;
+        }
+        unawaited(_handleBackRequest());
       },
       child: Scaffold(
         body: SafeArea(

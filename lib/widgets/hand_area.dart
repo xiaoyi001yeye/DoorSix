@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../models/card_model.dart';
@@ -64,21 +66,97 @@ class HandArea extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          SizedBox(
-            height: 92,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: cards.length,
-              itemBuilder: (context, index) {
-                final card = cards[index];
-                return HandCard(
-                  card: card,
-                  onTap: () => onToggle(card.id),
-                );
-              },
-            ),
+          _StackedHandScroller(
+            cards: cards,
+            onToggle: onToggle,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _StackedHandScroller extends StatelessWidget {
+  const _StackedHandScroller({
+    required this.cards,
+    required this.onToggle,
+  });
+
+  final List<CardInstance> cards;
+  final ValueChanged<String> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    if (cards.isEmpty) {
+      return const SizedBox(
+        height: 92,
+        child: Center(
+          child: Text(
+            '手牌已出完',
+            style: TextStyle(color: AppTheme.textSecondary),
+          ),
+        ),
+      );
+    }
+
+    const cardWidth = 52.0;
+    const cardHeight = 76.0;
+    const selectedLift = 18.0;
+    const minStep = 24.0;
+    const preferredStep = 36.0;
+
+    return SizedBox(
+      height: cardHeight + selectedLift,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final available = constraints.maxWidth.isFinite
+              ? constraints.maxWidth
+              : cardWidth + preferredStep * (cards.length - 1);
+          final fittedStep = cards.length <= 1
+              ? preferredStep
+              : (available - cardWidth) / (cards.length - 1);
+          final step = math.max(minStep, math.min(preferredStep, fittedStep));
+          final stackWidth = math.max(
+            available,
+            cardWidth + step * (cards.length - 1),
+          );
+          Widget positionedCard(int index) {
+            final card = cards[index];
+            return AnimatedPositioned(
+              key: ValueKey(card.id),
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOut,
+              left: index * step,
+              top: card.selected ? 0 : selectedLift,
+              child: HandCard(
+                card: card,
+                onTap: () => onToggle(card.id),
+                width: cardWidth,
+                height: cardHeight,
+                trailingMargin: 0,
+                showSelectionOffset: false,
+              ),
+            );
+          }
+
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: SizedBox(
+              width: stackWidth,
+              height: cardHeight + selectedLift,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  for (var index = 0; index < cards.length; index += 1)
+                    if (!cards[index].selected) positionedCard(index),
+                  for (var index = 0; index < cards.length; index += 1)
+                    if (cards[index].selected) positionedCard(index),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

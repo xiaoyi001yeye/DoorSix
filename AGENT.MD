@@ -197,6 +197,29 @@ flutter analyze
 flutter test
 ```
 
+## 自动提交与推送
+
+每次修改代码后，在完成必要检查或说明无法检查的原因后，必须使用项目脚本自动提交并推送当前分支：
+
+```bash
+scripts/auto_commit_push.sh "type: concise commit message"
+```
+
+脚本位置：
+
+- `scripts/auto_commit_push.sh`
+
+脚本行为：
+
+- 进入项目根目录。
+- 如没有改动，直接退出。
+- 运行 `git diff --check` 检查空白错误。
+- 执行 `git add -A`。
+- 使用传入的提交信息执行 `git commit -m`。
+- 推送当前分支；如果当前分支没有 upstream，则执行 `git push -u origin <branch>`。
+
+提交信息必须简短、清晰，优先使用常见前缀，例如 `feat:`、`fix:`、`chore:`、`docs:`、`test:`。如果当前环境无法推送，必须在最终回复里明确说明失败原因和当前提交状态。
+
 ## 编码约定
 
 - 项目根目录固定为 `/Users/wyn/code/DoorSix`。

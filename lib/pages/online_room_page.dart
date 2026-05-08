@@ -74,40 +74,53 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
   @override
   Widget build(BuildContext context) {
     final snapshot = _snapshot;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_session == null ? '联机房间' : '房间 ${_session!.room.roomCode}'),
-        leading: IconButton(
-          tooltip: '返回',
-          onPressed: _leaveAndPop,
-          icon: const Icon(Icons.arrow_back_rounded),
+    final isGameView = snapshot != null && snapshot.status != 'waiting';
+    return WillPopScope(
+      onWillPop: () async {
+        await _handleBackRequest();
+        return false;
+      },
+      child: Scaffold(
+        appBar: isGameView ? null : _buildRoomAppBar(),
+        body: SafeArea(
+          top: !isGameView,
+          bottom: !isGameView,
+          child: snapshot == null
+              ? _buildEntry()
+              : snapshot.status == 'waiting'
+                  ? _buildWaiting(snapshot)
+                  : _buildPlaying(snapshot),
         ),
-        actions: [
-          if (_session != null)
-            IconButton(
-              tooltip: '复制房间号',
-              onPressed: _copyRoomCode,
-              icon: const Icon(Icons.content_copy_rounded),
-            ),
-          IconButton(
-            tooltip: '同步',
-            onPressed: _session == null ? null : _syncState,
-            icon: const Icon(Icons.sync_rounded),
-          ),
-          IconButton(
-            tooltip: '服务器日志',
-            onPressed: () => showServerLogSheet(context),
-            icon: const Icon(Icons.terminal_rounded),
-          ),
-        ],
       ),
-      body: SafeArea(
-        child: snapshot == null
-            ? _buildEntry()
-            : snapshot.status == 'waiting'
-                ? _buildWaiting(snapshot)
-                : _buildPlaying(snapshot),
+    );
+  }
+
+  PreferredSizeWidget _buildRoomAppBar() {
+    return AppBar(
+      title: const Text('联机房间'),
+      leading: IconButton(
+        tooltip: '返回',
+        onPressed: _handleBackRequest,
+        icon: const Icon(Icons.arrow_back_rounded),
       ),
+      actions: [
+        if (_session != null)
+          IconButton(
+            tooltip: '复制房间号',
+            onPressed: _copyRoomCode,
+            icon: const Icon(Icons.content_copy_rounded),
+          ),
+        IconButton(
+          tooltip: '同步',
+          onPressed: _session == null ? null : _syncState,
+          icon: const Icon(Icons.sync_rounded),
+        ),
+        IconButton(
+          tooltip: '日志 / 控制台',
+          onPressed: _showCombinedLogs,
+          icon: const Icon(Icons.terminal_rounded),
+        ),
+      ],
     );
   }
 
@@ -250,7 +263,9 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
               round: snapshot.roundNo,
               score: snapshot.score,
               connected: _connected,
-              onLogs: _showLogs,
+              onBack: _handleBackRequest,
+              onRefresh: _syncState,
+              onLogs: _showCombinedLogs,
             ),
             if (isLandscape)
               Expanded(
@@ -687,6 +702,47 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     });
   }
 
+  Future<void> _handleBackRequest() async {
+    if (_snapshot?.status == 'playing') {
+      final shouldLeave = await _confirmExitGame();
+      if (!shouldLeave) {
+        return;
+      }
+    }
+    await _leaveAndPop();
+  }
+
+  Future<bool> _confirmExitGame() async {
+    if (!mounted) {
+      return false;
+    }
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('确认退出?'),
+          content: const Text('退出后本局将作废'),
+          actions: [
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.danger,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('退出'),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
+  }
+
   Future<void> _leaveAndPop() async {
     final session = _session;
     if (session != null) {
@@ -705,18 +761,21 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     return status == 'waiting' ? _setPortrait() : _setLandscape();
   }
 
-  Future<void> _setLandscape() {
-    return SystemChrome.setPreferredOrientations(const [
+  Future<void> _setLandscape() async {
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    await SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
   }
 
-  Future<void> _setPortrait() {
-    return SystemChrome.setPreferredOrientations(const [
+  Future<void> _setPortrait() async {
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    await SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
+    AppTheme.setSystemUi();
   }
 
   void _copyRoomCode() {
@@ -728,10 +787,12 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     _showMessage('房间号已复制');
   }
 
-  void _showLogs() {
+  void _showCombinedLogs() {
     showModalBottomSheet<void>(
       context: context,
-      builder: (context) => _LogPanel(logs: _logs),
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => _CombinedLogSheet(logs: _logs),
     );
   }
 
@@ -845,6 +906,8 @@ class _CompactTableHeader extends StatelessWidget {
     required this.round,
     required this.score,
     required this.connected,
+    required this.onBack,
+    required this.onRefresh,
     required this.onLogs,
   });
 
@@ -852,32 +915,85 @@ class _CompactTableHeader extends StatelessWidget {
   final int round;
   final OnlineScore score;
   final bool connected;
+  final VoidCallback onBack;
+  final VoidCallback onRefresh;
   final VoidCallback onLogs;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+      child: Column(
         children: [
-          _ConnectionDot(connected: connected),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '房间 $roomCode · 第 $round 局 · A ${score.teamA}:${score.teamB} B',
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontWeight: FontWeight.w800,
+          Row(
+            children: [
+              IconButton.filledTonal(
+                tooltip: '返回',
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back_rounded),
               ),
+              const SizedBox(width: 8),
+              _ConnectionDot(connected: connected),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '房间 $roomCode · 第 $round 局 · A ${score.teamA}:${score.teamB} B',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: _ToolStrip(
+              onRefresh: onRefresh,
+              onLogs: onLogs,
             ),
           ),
-          IconButton(
-            tooltip: '日志',
-            onPressed: onLogs,
-            icon: const Icon(Icons.receipt_long_outlined),
-          ),
         ],
+      ),
+    );
+  }
+}
+
+class _ToolStrip extends StatelessWidget {
+  const _ToolStrip({
+    required this.onRefresh,
+    required this.onLogs,
+  });
+
+  final VoidCallback onRefresh;
+  final VoidCallback onLogs;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppTheme.panel.withValues(alpha: 0.74),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0x3379D98B)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: '刷新',
+              onPressed: onRefresh,
+              icon: const Icon(Icons.sync_rounded),
+            ),
+            IconButton(
+              tooltip: '日志 / 控制台',
+              onPressed: onLogs,
+              icon: const Icon(Icons.terminal_rounded),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -995,6 +1111,117 @@ class _LogPanel extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+class _CombinedLogSheet extends StatelessWidget {
+  const _CombinedLogSheet({required this.logs});
+
+  final List<String> logs;
+
+  @override
+  Widget build(BuildContext context) {
+    final height = MediaQuery.sizeOf(context).height * 0.78;
+    return SafeArea(
+      child: SizedBox(
+        height: height,
+        child: DefaultTabController(
+          length: 2,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.receipt_long_outlined),
+                    const SizedBox(width: 8),
+                    Text(
+                      '日志',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: ServerLogStore.instance.clear,
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('清空通信日志'),
+                    ),
+                  ],
+                ),
+              ),
+              const TabBar(
+                tabs: [
+                  Tab(text: '牌局历史'),
+                  Tab(text: '通信日志'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _LogPanel(logs: logs),
+                    _ServerLogList(store: ServerLogStore.instance),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ServerLogList extends StatelessWidget {
+  const _ServerLogList({required this.store});
+
+  final ServerLogStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: store,
+      builder: (context, _) {
+        final entries = store.entries;
+        if (entries.isEmpty) {
+          return const Center(
+            child: Text(
+              '暂无服务器通信日志',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: entries.length,
+          separatorBuilder: (_, __) => const Divider(height: 16),
+          itemBuilder: (context, index) {
+            final entry = entries[index];
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.message,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (entry.detail != null && entry.detail!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    entry.detail!,
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

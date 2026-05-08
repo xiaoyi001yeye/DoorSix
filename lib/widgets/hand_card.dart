@@ -10,6 +10,9 @@ class HandCard extends StatelessWidget {
     required this.onTap,
     this.compact = false,
     this.showSelectionOffset = true,
+    this.width,
+    this.height,
+    this.trailingMargin,
     super.key,
   });
 
@@ -17,21 +20,24 @@ class HandCard extends StatelessWidget {
   final VoidCallback onTap;
   final bool compact;
   final bool showSelectionOffset;
+  final double? width;
+  final double? height;
+  final double? trailingMargin;
 
   @override
   Widget build(BuildContext context) {
-    final width = compact ? 40.0 : 48.0;
-    final height = compact ? 58.0 : 70.0;
+    final cardWidth = width ?? (compact ? 40.0 : 48.0);
+    final cardHeight = height ?? (compact ? 58.0 : 70.0);
 
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         curve: Curves.easeOut,
-        width: width,
-        height: height,
+        width: cardWidth,
+        height: cardHeight,
         margin: EdgeInsets.only(
-          right: compact ? 4 : 6,
+          right: trailingMargin ?? (compact ? 4 : 6),
           top: showSelectionOffset && !card.selected ? 14 : 0,
           bottom: showSelectionOffset && card.selected ? 14 : 0,
         ),

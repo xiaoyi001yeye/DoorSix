@@ -84,43 +84,51 @@ class _GameTablePageState extends State<GameTablePage> {
     final lastPlayedBy =
         _lastPlayedSeat == null ? null : _players[_lastPlayedSeat!].name;
 
-    return Scaffold(
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isLandscape = constraints.maxWidth > constraints.maxHeight;
-            return Column(
-              children: [
-                _buildHeader(),
-                if (isLandscape)
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _buildTableArea(
-                            currentPlayer: currentPlayer,
-                            lastPlayedBy: lastPlayedBy,
+    return WillPopScope(
+      onWillPop: () async {
+        await _handleBackRequest();
+        return false;
+      },
+      child: Scaffold(
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isLandscape = constraints.maxWidth > constraints.maxHeight;
+              return Column(
+                children: [
+                  _buildHeader(),
+                  if (isLandscape)
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildTableArea(
+                              currentPlayer: currentPlayer,
+                              lastPlayedBy: lastPlayedBy,
+                            ),
                           ),
-                        ),
-                        SizedBox(
-                          width: 360,
-                          child: _buildHandAndActions(),
-                        ),
-                      ],
+                          SizedBox(
+                            width: 360,
+                            child: _buildHandAndActions(),
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    Expanded(
+                      child: _buildTableArea(
+                        currentPlayer: currentPlayer,
+                        lastPlayedBy: lastPlayedBy,
+                      ),
                     ),
-                  )
-                else ...[
-                  Expanded(
-                    child: _buildTableArea(
-                      currentPlayer: currentPlayer,
-                      lastPlayedBy: lastPlayedBy,
-                    ),
-                  ),
-                  _buildHandAndActions(),
+                    _buildHandAndActions(),
+                  ],
                 ],
-              ],
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -132,7 +140,7 @@ class _GameTablePageState extends State<GameTablePage> {
       round: _round,
       teamAScore: _teamAScore,
       teamBScore: _teamBScore,
-      onBack: () => context.pop(),
+      onBack: _handleBackRequest,
       onRuleTap: _showRuleSheet,
       onLogTap: _showLogSheet,
     );
@@ -358,6 +366,41 @@ class _GameTablePageState extends State<GameTablePage> {
     _passSeat(_currentSeat);
   }
 
+  Future<void> _handleBackRequest() async {
+    final shouldLeave = await _confirmExitGame();
+    if (shouldLeave && mounted) {
+      context.pop();
+    }
+  }
+
+  Future<bool> _confirmExitGame() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('确认退出?'),
+          content: const Text('退出后本局将作废'),
+          actions: [
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.danger,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('退出'),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
+  }
+
   void _playCards(int seat, List<CardInstance> cards, CardCombo combo) {
     setState(() {
       final ids = cards.map((card) => card.id).toSet();
@@ -424,18 +467,21 @@ class _GameTablePageState extends State<GameTablePage> {
     _kickAiIfNeeded();
   }
 
-  Future<void> _setLandscape() {
-    return SystemChrome.setPreferredOrientations(const [
+  Future<void> _setLandscape() async {
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    await SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
   }
 
-  Future<void> _setPortrait() {
-    return SystemChrome.setPreferredOrientations(const [
+  Future<void> _setPortrait() async {
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    await SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
+    AppTheme.setSystemUi();
   }
 
   int get _activePlayerCount {

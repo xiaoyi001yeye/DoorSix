@@ -15,8 +15,8 @@ import '../services/rule_engine.dart';
 import '../services/server_log_store.dart';
 import '../utils/app_theme.dart';
 import '../widgets/action_bar.dart';
+import '../widgets/game_table_layout.dart';
 import '../widgets/hand_area.dart';
-import '../widgets/player_seat.dart';
 import '../widgets/server_log_sheet.dart';
 import '../widgets/table_center.dart';
 
@@ -35,6 +35,8 @@ class OnlineRoomPage extends StatefulWidget {
 }
 
 class _OnlineRoomPageState extends State<OnlineRoomPage> {
+  static const int _turnDurationSeconds = 10;
+
   final DoorSixBackendClient _client = DoorSixBackendClient();
   final RuleEngine _engine = const RuleEngine();
   final TextEditingController _nicknameController =
@@ -52,6 +54,9 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
   bool _busy = false;
   bool _connected = false;
   int _seq = 0;
+  int? _turnSecondsRemaining;
+  int _serverClockOffsetMs = 0;
+  Timer? _turnTimer;
 
   @override
   void initState() {
@@ -62,6 +67,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
 
   @override
   void dispose() {
+    _turnTimer?.cancel();
     unawaited(_setPortrait());
     _socketSub?.cancel();
     _socket?.close();
@@ -284,7 +290,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
                       ),
                     ),
                     SizedBox(
-                      width: 360,
+                      width: 340,
                       child: _buildOnlineHandAndActions(
                         myHand: myHand,
                         selectedCombo: selectedCombo,
@@ -331,43 +337,28 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     required int currentSeat,
     required String? lastPlayedBy,
   }) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-      child: Stack(
-        children: [
-          Align(
-            alignment: Alignment.center,
-            child: Container(
-              width: 300,
-              height: 190,
-              decoration: BoxDecoration(
-                color: AppTheme.tableGreen,
-                borderRadius: BorderRadius.circular(96),
-                border: Border.all(color: const Color(0x6679D98B)),
-              ),
-            ),
-          ),
-          Align(
-            alignment: Alignment.center,
-            child: TableCenter(
-              activeCombo: snapshot.tableCombo,
-              playedCards: snapshot.tableCombo?.cards ?? const <CardInstance>[],
-              lastPlayedBy: lastPlayedBy,
-              currentPlayer: currentPlayer.name,
-              passCount: snapshot.passCount,
-            ),
-          ),
-          for (var seat = 0; seat < players.length; seat += 1)
-            Align(
-              alignment: _seatAlignment(seat),
-              child: PlayerSeat(
-                player: players[seat],
-                isCurrent: seat == currentSeat && snapshot.status == 'playing',
-                isAlly: players[seat].team == _selfTeam(snapshot),
-              ),
-            ),
-        ],
-      ),
+    return GameTableLayout(
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+      players: players,
+      currentSeat: snapshot.status == 'playing' ? currentSeat : null,
+      selfTeam: _selfTeam(snapshot),
+      finishOrder: snapshot.finishOrder,
+      countdownSecondsForSeat: (seat) {
+        if (seat != currentSeat || snapshot.status != 'playing') {
+          return null;
+        }
+        return _turnSecondsRemaining ?? _turnDurationSeconds;
+      },
+      centerBuilder: (context, width) {
+        return TableCenter(
+          width: width,
+          activeCombo: snapshot.tableCombo,
+          playedCards: snapshot.tableCombo?.cards ?? const <CardInstance>[],
+          lastPlayedBy: lastPlayedBy,
+          currentPlayer: currentPlayer.name,
+          passCount: snapshot.passCount,
+        );
+      },
     );
   }
 
@@ -404,18 +395,6 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
         ),
       ],
     );
-  }
-
-  Alignment _seatAlignment(int seat) {
-    return switch (seat) {
-      0 => const Alignment(0, 0.98),
-      1 => const Alignment(-0.83, 0.46),
-      2 => const Alignment(-0.83, -0.46),
-      3 => const Alignment(0, -0.98),
-      4 => const Alignment(0.83, -0.46),
-      5 => const Alignment(0.83, 0.46),
-      _ => Alignment.center,
-    };
   }
 
   Future<void> _restoreNickname() async {
@@ -456,11 +435,8 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
       if (!mounted) {
         return;
       }
-      unawaited(_setOrientationForStatus(snapshot.status));
-      setState(() {
-        _snapshot = snapshot;
-        _selectedCardIds.clear();
-      });
+      _selectedCardIds.clear();
+      _applySnapshot(snapshot);
     } on DoorSixBackendException catch (error) {
       _showMessage(error.message);
       if (mounted) {
@@ -518,15 +494,10 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     }
 
     if (payload['tableState'] != null) {
-      final snapshot = OnlineTableSnapshot.fromJson(payload);
-      unawaited(_setOrientationForStatus(snapshot.status));
-      setState(() {
-        _snapshot = snapshot;
-        _selectedCardIds.removeWhere(
-          (id) => !snapshot.myHand.any((card) => card.id == id),
-        );
-        _logs.add(_eventLabel(type));
-      });
+      final snapshotPayload = Map<String, dynamic>.from(payload)
+        ..['serverTime'] = data['serverTime'];
+      final snapshot = OnlineTableSnapshot.fromJson(snapshotPayload);
+      _applySnapshot(snapshot, logLabel: _eventLabel(type));
       if (type == 'round_settled') {
         _showMessage('本局已结算');
       }
@@ -566,8 +537,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     try {
       final snapshot = await _client.snapshot(session);
       if (mounted) {
-        unawaited(_setOrientationForStatus(snapshot.status));
-        setState(() => _snapshot = snapshot);
+        _applySnapshot(snapshot);
       }
     } catch (_) {
       _sendWs('sync_state', {
@@ -614,6 +584,77 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
       detail: _compactLogDetail(message),
     );
     socket.add(message);
+  }
+
+  void _applySnapshot(OnlineTableSnapshot snapshot, {String? logLabel}) {
+    if (!mounted) {
+      return;
+    }
+    _syncServerClock(snapshot);
+    final turnSecondsRemaining = _secondsRemainingFor(snapshot);
+    unawaited(_setOrientationForStatus(snapshot.status));
+    setState(() {
+      _snapshot = snapshot;
+      _turnSecondsRemaining = turnSecondsRemaining;
+      _selectedCardIds.removeWhere(
+        (id) => !snapshot.myHand.any((card) => card.id == id),
+      );
+      if (logLabel != null) {
+        _logs.add(logLabel);
+      }
+    });
+    _restartOnlineTurnCountdown(snapshot);
+  }
+
+  void _syncServerClock(OnlineTableSnapshot snapshot) {
+    final serverTime = snapshot.serverTime;
+    if (serverTime == null) {
+      return;
+    }
+    _serverClockOffsetMs =
+        serverTime - DateTime.now().millisecondsSinceEpoch;
+  }
+
+  int? _secondsRemainingFor(OnlineTableSnapshot snapshot) {
+    final deadline = snapshot.turnDeadlineAt;
+    if (snapshot.status != 'playing' || deadline == null) {
+      return null;
+    }
+    final nowMs = DateTime.now().millisecondsSinceEpoch + _serverClockOffsetMs;
+    final remainingMs = deadline - nowMs;
+    return (remainingMs / 1000)
+        .ceil()
+        .clamp(0, _turnDurationSeconds)
+        .toInt();
+  }
+
+  void _restartOnlineTurnCountdown(OnlineTableSnapshot snapshot) {
+    _turnTimer?.cancel();
+    if (_secondsRemainingFor(snapshot) == null) {
+      return;
+    }
+
+    _turnTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final current = _snapshot;
+      if (!mounted || current == null || current.status != 'playing') {
+        timer.cancel();
+        return;
+      }
+
+      if (current.gameId != snapshot.gameId ||
+          current.roundNo != snapshot.roundNo ||
+          current.currentTurnSeatIndex != snapshot.currentTurnSeatIndex ||
+          current.turnDeadlineAt != snapshot.turnDeadlineAt) {
+        timer.cancel();
+        return;
+      }
+
+      final remaining = _secondsRemainingFor(current);
+      setState(() => _turnSecondsRemaining = remaining);
+      if (remaining == null || remaining <= 0) {
+        timer.cancel();
+      }
+    });
   }
 
   OnlineSeat? _selfSeat(OnlineTableSnapshot snapshot) {
@@ -795,7 +836,10 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (context) => _CombinedLogSheet(logs: _logs),
+      builder: (context) => _CombinedLogSheet(
+        logs: _logs,
+        history: _snapshot?.actionHistory ?? const [],
+      ),
     );
   }
 
@@ -1119,9 +1163,13 @@ class _LogPanel extends StatelessWidget {
 }
 
 class _CombinedLogSheet extends StatelessWidget {
-  const _CombinedLogSheet({required this.logs});
+  const _CombinedLogSheet({
+    required this.logs,
+    required this.history,
+  });
 
   final List<String> logs;
+  final List<OnlineActionHistoryEntry> history;
 
   @override
   Widget build(BuildContext context) {
@@ -1161,12 +1209,192 @@ class _CombinedLogSheet extends StatelessWidget {
               Expanded(
                 child: TabBarView(
                   children: [
-                    _LogPanel(logs: logs),
+                    _ActionHistoryPanel(history: history, fallbackLogs: logs),
                     _ServerLogList(store: ServerLogStore.instance),
                   ],
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionHistoryPanel extends StatelessWidget {
+  const _ActionHistoryPanel({
+    required this.history,
+    required this.fallbackLogs,
+  });
+
+  final List<OnlineActionHistoryEntry> history;
+  final List<String> fallbackLogs;
+
+  @override
+  Widget build(BuildContext context) {
+    if (history.isEmpty) {
+      final logs = fallbackLogs.isEmpty ? const ['暂无出牌记录'] : fallbackLogs;
+      return ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: logs.length,
+        separatorBuilder: (_, __) => const Divider(height: 16),
+        itemBuilder: (context, index) {
+          return Text(
+            logs[index],
+            style: const TextStyle(color: AppTheme.textSecondary),
+          );
+        },
+      );
+    }
+
+    final entries = history.toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
+      itemCount: entries.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        return _ActionHistoryTile(entry: entries[index]);
+      },
+    );
+  }
+}
+
+class _ActionHistoryTile extends StatelessWidget {
+  const _ActionHistoryTile({required this.entry});
+
+  final OnlineActionHistoryEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPlay = entry.actionType == OnlineActionType.play;
+    final color = isPlay ? AppTheme.success : AppTheme.textSecondary;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppTheme.panel,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.32)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 58,
+              child: Text(
+                _timeLabel(entry.createdAt),
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              isPlay
+                  ? Icons.file_upload_outlined
+                  : Icons.keyboard_tab_rounded,
+              size: 18,
+              color: color,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        _title,
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      if (_sourceLabel != null)
+                        _HistoryChip(label: _sourceLabel!),
+                    ],
+                  ),
+                  if (isPlay && entry.cards.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      entry.cards.map(_cardLabel).join('、'),
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String get _title {
+    return switch (entry.actionType) {
+      OnlineActionType.play =>
+        '${entry.playerName} 出 ${entry.comboLabel ?? '牌'}',
+      OnlineActionType.pass => '${entry.playerName} 过牌',
+      OnlineActionType.newLead => '一圈过牌，${entry.playerName} 重新领出',
+    };
+  }
+
+  String? get _sourceLabel {
+    return switch (entry.source) {
+      OnlineActionSource.ai => 'AI',
+      OnlineActionSource.timeout => '托管',
+      OnlineActionSource.player => null,
+    };
+  }
+
+  String _timeLabel(int millisecondsSinceEpoch) {
+    final time = DateTime.fromMillisecondsSinceEpoch(millisecondsSinceEpoch);
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    final second = time.second.toString().padLeft(2, '0');
+    return '$hour:$minute:$second';
+  }
+
+  String _cardLabel(CardInstance card) {
+    if (card.suit == CardSuit.joker) {
+      return card.rank.label;
+    }
+    return '${card.suit.label}${card.rank.label}';
+  }
+}
+
+class _HistoryChip extends StatelessWidget {
+  const _HistoryChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppTheme.tableDark,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0x3379D98B)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.teamGold,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
           ),
         ),
       ),

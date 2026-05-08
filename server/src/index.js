@@ -17,6 +17,9 @@ const MATCH_LOG_DIR = process.env.MATCH_LOG_DIR || path.join(process.cwd(), 'log
 
 const RULE_SET_ID = 'zha_liujia_tianjin_basic_v1';
 const MAX_PLAYERS = 6;
+const TURN_TIMEOUT_MS = 10000;
+const AI_MIN_DELAY_MS = 3000;
+const AI_MAX_DELAY_MS = 8000;
 const TEAM_BY_SEAT = ['B', 'A', 'B', 'A', 'B', 'A'];
 const COMBO_TYPES = ['invalid', 'single', 'pair', 'triple', 'quad'];
 const RANK_STRENGTH = {
@@ -194,6 +197,7 @@ class StateStore {
 
 const store = new StateStore();
 const socketsByRoom = new Map();
+const turnTimersByRoom = new Map();
 
 function createDeck() {
   const cards = [];
@@ -357,9 +361,12 @@ function tableStateFor(state) {
     ruleSetId: RULE_SET_ID,
     ownerPlayerId: state.room.ownerPlayerId,
     currentTurnSeatIndex: state.game.currentTurnSeatIndex,
+    turnStartedAt: state.game.turnStartedAt,
+    turnDeadlineAt: state.game.turnDeadlineAt,
     lastPlayedSeatIndex: state.game.lastPlayedSeatIndex,
     passCount: state.game.passCount,
     tableCombo: state.game.tableCombo,
+    actionHistory: state.game.actionHistory || [],
     seats: state.seats.map(seatView),
     finishOrder: state.game.finishOrder,
     score: state.game.score,
@@ -371,6 +378,7 @@ function snapshotFor(state, playerId) {
     tableState: tableStateFor(state),
     myHand: sortCards(state.hands[playerId] || []),
     eventSeq: state.eventSeq,
+    serverTime: now(),
   };
 }
 
@@ -438,9 +446,12 @@ function createInitialState(nickname, requestedSeatIndex) {
       gameId: null,
       roundNo: 0,
       currentTurnSeatIndex: null,
+      turnStartedAt: null,
+      turnDeadlineAt: null,
       lastPlayedSeatIndex: null,
       passCount: 0,
       tableCombo: null,
+      actionHistory: [],
       finishOrder: [],
       score: { teamA: 0, teamB: 0 },
       settled: false,
@@ -458,12 +469,47 @@ function activeSeats(state) {
   return state.seats.filter((seat) => seat && seat.finishRank == null);
 }
 
+function beginTurn(state, seatIndex = state.game.currentTurnSeatIndex) {
+  state.game.currentTurnSeatIndex = seatIndex;
+  const startedAt = now();
+  state.game.turnStartedAt = startedAt;
+  state.game.turnDeadlineAt = startedAt + TURN_TIMEOUT_MS;
+}
+
+function cardHistoryView(card) {
+  return {
+    cardId: card.cardId,
+    deckIndex: card.deckIndex,
+    suit: card.suit,
+    rank: card.rank,
+  };
+}
+
+function recordAction(state, seat, actionType, options = {}) {
+  const history = state.game.actionHistory || [];
+  history.push({
+    id: id('act'),
+    createdAt: now(),
+    actionType,
+    source: options.source || (seat.isAi ? 'ai' : 'player'),
+    seatIndex: seat.seatIndex,
+    playerId: seat.playerId,
+    nickname: seat.nickname,
+    team: seat.team,
+    isAi: seat.isAi,
+    cards: (options.cards || []).map(cardHistoryView),
+    comboLabel: options.combo?.label || null,
+    finishRank: options.finishRank ?? null,
+  });
+  state.game.actionHistory = history.slice(-200);
+}
+
 function advanceTurn(state) {
   let next = (state.game.currentTurnSeatIndex + 1) % MAX_PLAYERS;
   while (state.seats[next]?.finishRank != null) {
     next = (next + 1) % MAX_PLAYERS;
   }
-  state.game.currentTurnSeatIndex = next;
+  beginTurn(state, next);
   return next;
 }
 
@@ -610,9 +656,11 @@ function startGame(state) {
   state.game.gameId = id('g');
   state.game.roundNo += 1;
   state.game.currentTurnSeatIndex = findFirstLeadSeat(handsBySeat);
+  beginTurn(state);
   state.game.lastPlayedSeatIndex = null;
   state.game.passCount = 0;
   state.game.tableCombo = null;
+  state.game.actionHistory = [];
   state.game.finishOrder = [];
   state.game.settled = false;
 }
@@ -627,7 +675,7 @@ function cardsByIds(hand, cardIds) {
   return cards;
 }
 
-async function playCards(state, seat, cards) {
+async function playCards(state, seat, cards, source = 'player') {
   const hand = state.hands[seat.playerId] || [];
   const combo = evaluateCombo(cards);
   if (combo.comboType === 'invalid') {
@@ -657,49 +705,141 @@ async function playCards(state, seat, cards) {
     });
   }
 
+  recordAction(state, seat, 'play', { cards, combo, finishRank, source });
+
   const settlement = settleIfNeeded(state);
   if (!settlement) {
     advanceTurn(state);
+  } else {
+    state.game.turnStartedAt = null;
+    state.game.turnDeadlineAt = null;
   }
   return { combo, finishRank, settlement };
 }
 
-async function passTurn(state, seat) {
+async function passTurn(state, seat, source = 'player') {
   if (!state.game.tableCombo) {
     return { error: ['INVALID_REQUEST', '新一轮领出不能过牌'] };
   }
   state.game.passCount += 1;
+  recordAction(state, seat, 'pass', { source });
   let newLead = false;
   if (state.game.passCount >= activeSeats(state).length - 1) {
     newLead = true;
     state.game.tableCombo = null;
     state.game.passCount = 0;
-    state.game.currentTurnSeatIndex = state.game.lastPlayedSeatIndex;
+    const leadSeat = state.game.lastPlayedSeatIndex;
+    beginTurn(state, leadSeat);
+    const leader = state.seats[leadSeat];
+    if (leader) {
+      recordAction(state, leader, 'new_lead', { source });
+    }
   } else {
     advanceTurn(state);
   }
   return { newLead };
 }
 
-async function runAiTurns(state) {
-  let safety = 200;
-  const events = [];
-  while (safety > 0 && state.room.status === 'playing') {
-    safety -= 1;
-    const seat = state.seats[state.game.currentTurnSeatIndex];
-    if (!seat?.isAi || seat.finishRank != null) break;
-
-    const suggestion = suggestCards(state.hands[seat.playerId] || [], state.game.tableCombo);
-    if (suggestion.length === 0) {
-      const passed = await passTurn(state, seat);
-      events.push({ kind: 'pass', seat, result: passed });
-    } else {
-      const played = await playCards(state, seat, suggestion);
-      events.push({ kind: 'play', seat, result: played });
-      if (played.settlement) break;
-    }
+async function autoActCurrentSeat(state, source) {
+  const seat = state.seats[state.game.currentTurnSeatIndex];
+  if (!seat || seat.finishRank != null) {
+    return { kind: 'none' };
   }
-  return events;
+
+  const hand = state.hands[seat.playerId] || [];
+  const suggestion = suggestCards(hand, state.game.tableCombo);
+  if (suggestion.length > 0) {
+    const result = await playCards(state, seat, suggestion, source);
+    return { kind: 'play', seat, result };
+  }
+
+  if (!state.game.tableCombo && hand.length > 0) {
+    const fallback = [sortCards(hand)[0]];
+    const result = await playCards(state, seat, fallback, source);
+    return { kind: 'play', seat, result };
+  }
+
+  if (state.game.tableCombo) {
+    const result = await passTurn(state, seat, source);
+    return { kind: 'pass', seat, result };
+  }
+
+  return { kind: 'none' };
+}
+
+function clearTurnTimer(roomId) {
+  const timer = turnTimersByRoom.get(roomId);
+  if (timer) {
+    clearTimeout(timer);
+    turnTimersByRoom.delete(roomId);
+  }
+}
+
+function scheduleTurnTimer(state, options = {}) {
+  const roomId = state.room.roomId;
+  if (options.force === false && turnTimersByRoom.has(roomId)) {
+    return;
+  }
+  clearTurnTimer(roomId);
+  if (state.room.status !== 'playing') {
+    return;
+  }
+
+  const seat = state.seats[state.game.currentTurnSeatIndex];
+  if (!seat || seat.finishRank != null) {
+    return;
+  }
+
+  const expected = {
+    gameId: state.game.gameId,
+    roundNo: state.game.roundNo,
+    seatIndex: state.game.currentTurnSeatIndex,
+    turnStartedAt: state.game.turnStartedAt,
+  };
+  const delay = seat.isAi
+    ? crypto.randomInt(AI_MIN_DELAY_MS, AI_MAX_DELAY_MS + 1)
+    : Math.max(0, (state.game.turnDeadlineAt || now()) - now());
+
+  const timer = setTimeout(() => {
+    turnTimersByRoom.delete(roomId);
+    handleTurnTimer(roomId, expected, seat.isAi ? 'ai' : 'timeout')
+      .catch((error) => console.error('[turn-timer]', error));
+  }, delay);
+  turnTimersByRoom.set(roomId, timer);
+}
+
+async function handleTurnTimer(roomId, expected, source) {
+  const state = await store.getRoom(roomId);
+  if (!state || state.room.status !== 'playing') {
+    return;
+  }
+  if (state.game.gameId !== expected.gameId ||
+      state.game.roundNo !== expected.roundNo ||
+      state.game.currentTurnSeatIndex !== expected.seatIndex ||
+      state.game.turnStartedAt !== expected.turnStartedAt) {
+    return;
+  }
+
+  const action = await autoActCurrentSeat(state, source);
+  if (action.kind === 'none') {
+    scheduleTurnTimer(state, { force: false });
+    return;
+  }
+
+  nextEventSeq(state);
+  await store.setRoom(state);
+  if (action.result?.settlement) {
+    await appendMatchLog(state, action.result.settlement);
+  }
+  const type = action.result?.settlement
+    ? 'round_settled'
+    : action.result?.newLead
+      ? 'new_lead_started'
+      : action.kind === 'pass'
+      ? 'player_passed'
+      : 'table_snapshot';
+  await broadcastStateSnapshots(state, type, null);
+  scheduleTurnTimer(state);
 }
 
 async function loadLogs() {
@@ -835,6 +975,7 @@ app.post('/api/v1/rooms/:roomId/leave', async (req, res) => {
   const roomClosed = auth.playerId === state.room.ownerPlayerId || state.room.status !== 'waiting';
   if (roomClosed) {
     state.room.status = 'closed';
+    clearTurnTimer(state.room.roomId);
     await store.deleteRoom(state);
   } else {
     state.seats[auth.seat.seatIndex] = null;
@@ -968,6 +1109,7 @@ wss.on('connection', async (ws) => {
       serverTime: now(),
       payload: { seatIndex: seat.seatIndex, playerId: seat.playerId },
     }, { excludePlayerId: ws.playerId });
+    scheduleTurnTimer(state, { force: false });
   }
 
   ws.on('message', async (buffer) => {
@@ -986,15 +1128,14 @@ wss.on('connection', async (ws) => {
       return;
     }
 
-    async function persistAndSnapshots(type) {
-      const aiEvents = await runAiTurns(state);
+    async function persistAndSnapshots(type, settlement = null) {
       nextEventSeq(state);
       await store.setRoom(state);
-      if (aiEvents.some((event) => event.result?.settlement)) {
-        const settlement = aiEvents.find((event) => event.result?.settlement).result.settlement;
+      if (settlement) {
         await appendMatchLog(state, settlement);
       }
       await broadcastStateSnapshots(state, type, message.requestId);
+      scheduleTurnTimer(state);
     }
 
     try {
@@ -1014,6 +1155,7 @@ wss.on('connection', async (ws) => {
 
       if (message.type === 'sync_state') {
         await sendSnapshot(ws, state, message.requestId);
+        scheduleTurnTimer(state, { force: false });
         return;
       }
 
@@ -1051,10 +1193,10 @@ wss.on('connection', async (ws) => {
         if (!cards) throw ['INVALID_CARDS', '牌不存在、不是自己的牌或重复提交'];
         const result = await playCards(state, seat, cards);
         if (result.error) throw result.error;
-        nextEventSeq(state);
-        await store.setRoom(state);
-        if (result.settlement) await appendMatchLog(state, result.settlement);
-        await persistAndSnapshots('table_snapshot');
+        await persistAndSnapshots(
+          result.settlement ? 'round_settled' : 'table_snapshot',
+          result.settlement,
+        );
         return;
       }
 

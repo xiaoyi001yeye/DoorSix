@@ -12,8 +12,8 @@ import '../models/rule_set.dart';
 import '../services/rule_engine.dart';
 import '../utils/app_theme.dart';
 import '../widgets/action_bar.dart';
+import '../widgets/game_table_layout.dart';
 import '../widgets/hand_area.dart';
-import '../widgets/player_seat.dart';
 import '../widgets/rule_badge.dart';
 import '../widgets/table_center.dart';
 
@@ -33,6 +33,7 @@ class _GameTablePageState extends State<GameTablePage> {
   static const int _turnDurationSeconds = 10;
 
   final RuleEngine _engine = const RuleEngine();
+  final math.Random _aiRandom = math.Random();
   final List<String> _logs = [];
   final List<FinishedSeat> _finishOrder = [];
 
@@ -163,53 +164,24 @@ class _GameTablePageState extends State<GameTablePage> {
     required GamePlayer currentPlayer,
     required String? lastPlayedBy,
   }) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 8, 18, 14),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final tableWidth = math.min(330.0, constraints.maxWidth * 0.58);
-          final tableHeight = math.max(164.0, tableWidth * 0.58);
-
-          return Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Align(
-                alignment: Alignment.center,
-                child: SizedBox(
-                  width: tableWidth,
-                  height: tableHeight,
-                  child: const _TableMat(),
-                ),
-              ),
-              Align(
-                alignment: Alignment.center,
-                child: TableCenter(
-                  activeCombo: _activeCombo,
-                  playedCards: _lastPlayedCards,
-                  lastPlayedBy: lastPlayedBy,
-                  currentPlayer: currentPlayer.name,
-                  passCount: _passCount,
-                ),
-              ),
-              for (var seat = 0; seat < _players.length; seat += 1)
-                Align(
-                  alignment: _seatAlignment(seat),
-                  child: PlayerSeat(
-                    player: _players[seat],
-                    isCurrent: seat == _currentSeat && _roundResult == null,
-                    isAlly: _players[seat].team == _players[0].team,
-                    countdownSeconds:
-                        seat == _currentSeat ? _turnSecondsRemaining : null,
-                  ),
-                ),
-              Align(
-                alignment: const Alignment(0, 0.58),
-                child: _FinishOrderBar(finishOrder: _finishOrder),
-              ),
-            ],
-          );
-        },
-      ),
+    return GameTableLayout(
+      players: _players,
+      currentSeat: _roundResult == null ? _currentSeat : null,
+      selfTeam: _players[0].team,
+      finishOrder: _finishOrder,
+      countdownSecondsForSeat: (seat) {
+        return seat == _currentSeat ? _turnSecondsRemaining : null;
+      },
+      centerBuilder: (context, width) {
+        return TableCenter(
+          width: width,
+          activeCombo: _activeCombo,
+          playedCards: _lastPlayedCards,
+          lastPlayedBy: lastPlayedBy,
+          currentPlayer: currentPlayer.name,
+          passCount: _passCount,
+        );
+      },
     );
   }
 
@@ -234,18 +206,6 @@ class _GameTablePageState extends State<GameTablePage> {
         ),
       ],
     );
-  }
-
-  Alignment _seatAlignment(int seat) {
-    return switch (seat) {
-      0 => const Alignment(0, 0.88),
-      1 => const Alignment(-0.92, 0.42),
-      2 => const Alignment(-0.92, -0.42),
-      3 => const Alignment(0, -0.84),
-      4 => const Alignment(0.92, -0.42),
-      5 => const Alignment(0.92, 0.42),
-      _ => Alignment.center,
-    };
   }
 
   void _startRound({required bool resetScores}) {
@@ -665,7 +625,7 @@ class _GameTablePageState extends State<GameTablePage> {
   Future<void> _runAiTurns() async {
     _aiRunning = true;
     while (mounted && !_isUserTurn && _roundResult == null) {
-      await Future<void>.delayed(const Duration(milliseconds: 650));
+      await Future<void>.delayed(Duration(seconds: 3 + _aiRandom.nextInt(6)));
       if (!mounted || _isUserTurn || _roundResult != null) {
         break;
       }
@@ -871,95 +831,6 @@ class _TableHeader extends StatelessWidget {
             icon: const Icon(Icons.receipt_long_outlined),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _TableMat extends StatelessWidget {
-  const _TableMat();
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(96),
-        gradient: const RadialGradient(
-          center: Alignment(0, -0.18),
-          radius: 0.9,
-          colors: [
-            Color(0xFF1F8A68),
-            AppTheme.tableGreen,
-            Color(0xFF0D4037),
-          ],
-          stops: [0, 0.58, 1],
-        ),
-        border: Border.all(color: const Color(0x8859D68B), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.34),
-            blurRadius: 26,
-            offset: const Offset(0, 12),
-          ),
-          BoxShadow(
-            color: AppTheme.success.withValues(alpha: 0.14),
-            blurRadius: 22,
-            spreadRadius: -2,
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(82),
-            border: Border.all(color: const Color(0x3379D98B), width: 1),
-          ),
-          child: Align(
-            alignment: const Alignment(0, -0.08),
-            child: FractionallySizedBox(
-              widthFactor: 0.54,
-              heightFactor: 0.18,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  color: Colors.white.withValues(alpha: 0.06),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FinishOrderBar extends StatelessWidget {
-  const _FinishOrderBar({required this.finishOrder});
-
-  final List<FinishedSeat> finishOrder;
-
-  @override
-  Widget build(BuildContext context) {
-    if (finishOrder.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 300),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.panel.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Text(
-        '出完顺序：${finishOrder.map((seat) => seat.playerName).join('、')}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: AppTheme.textPrimary,
-          fontWeight: FontWeight.w800,
-        ),
       ),
     );
   }

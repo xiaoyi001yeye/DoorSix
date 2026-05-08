@@ -96,6 +96,9 @@ test('creates a room and starts a WebSocket game', async (t) => {
       if (message.type === 'game_started') {
         clearTimeout(timeout);
         assert.equal(message.payload.tableState.status, 'playing');
+        assert.equal(typeof message.payload.tableState.turnStartedAt, 'number');
+        assert.equal(typeof message.payload.tableState.turnDeadlineAt, 'number');
+        assert.ok(Array.isArray(message.payload.tableState.actionHistory));
         assert.equal(message.payload.myHand.length, 9);
         ws.close();
         resolve();

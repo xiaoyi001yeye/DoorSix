@@ -125,6 +125,10 @@ class OnlineTableSnapshot {
     required this.score,
     required this.myHand,
     required this.eventSeq,
+    required this.actionHistory,
+    this.turnStartedAt,
+    this.turnDeadlineAt,
+    this.serverTime,
   });
 
   final String roomId;
@@ -141,11 +145,16 @@ class OnlineTableSnapshot {
   final OnlineScore score;
   final List<CardInstance> myHand;
   final int eventSeq;
+  final List<OnlineActionHistoryEntry> actionHistory;
+  final int? turnStartedAt;
+  final int? turnDeadlineAt;
+  final int? serverTime;
 
   factory OnlineTableSnapshot.fromJson(Map<String, dynamic> json) {
     final table = json['tableState'] as Map<String, dynamic>;
     final seatsJson = table['seats'] as List<dynamic>? ?? const [];
     final finishJson = table['finishOrder'] as List<dynamic>? ?? const [];
+    final historyJson = table['actionHistory'] as List<dynamic>? ?? const [];
     return OnlineTableSnapshot(
       roomId: table['roomId'] as String,
       gameId: table['gameId'] as String?,
@@ -177,6 +186,74 @@ class OnlineTableSnapshot {
           .map((card) => _cardFromJson(card as Map<String, dynamic>))
           .toList(),
       eventSeq: json['eventSeq'] as int? ?? 0,
+      actionHistory: historyJson
+          .map((item) => OnlineActionHistoryEntry.fromJson(
+                item as Map<String, dynamic>,
+              ))
+          .toList(growable: false),
+      turnStartedAt: table['turnStartedAt'] as int?,
+      turnDeadlineAt: table['turnDeadlineAt'] as int?,
+      serverTime: json['serverTime'] as int?,
+    );
+  }
+}
+
+enum OnlineActionType {
+  play,
+  pass,
+  newLead,
+}
+
+enum OnlineActionSource {
+  player,
+  ai,
+  timeout,
+}
+
+class OnlineActionHistoryEntry {
+  const OnlineActionHistoryEntry({
+    required this.id,
+    required this.createdAt,
+    required this.actionType,
+    required this.source,
+    required this.seatIndex,
+    required this.playerId,
+    required this.playerName,
+    required this.team,
+    required this.cards,
+    this.comboLabel,
+    this.finishRank,
+  });
+
+  final String id;
+  final int createdAt;
+  final OnlineActionType actionType;
+  final OnlineActionSource source;
+  final int seatIndex;
+  final String playerId;
+  final String playerName;
+  final TeamSide team;
+  final List<CardInstance> cards;
+  final String? comboLabel;
+  final int? finishRank;
+
+  factory OnlineActionHistoryEntry.fromJson(Map<String, dynamic> json) {
+    return OnlineActionHistoryEntry(
+      id: json['id'] as String? ?? '',
+      createdAt: json['createdAt'] as int? ?? 0,
+      actionType: _actionTypeFromJson(json['actionType'] as String?),
+      source: _actionSourceFromJson(json['source'] as String?),
+      seatIndex: json['seatIndex'] as int? ?? 0,
+      playerId: json['playerId'] as String? ?? '',
+      playerName: (json['nickname'] as String?) ??
+          (json['playerId'] as String?) ??
+          '',
+      team: (json['team'] as String?) == 'A' ? TeamSide.a : TeamSide.b,
+      cards: (json['cards'] as List<dynamic>? ?? const [])
+          .map((card) => _cardFromJson(card as Map<String, dynamic>))
+          .toList(growable: false),
+      comboLabel: json['comboLabel'] as String?,
+      finishRank: json['finishRank'] as int?,
     );
   }
 }
@@ -193,6 +270,22 @@ class OnlineScore {
       teamB: json?['teamB'] as int? ?? 0,
     );
   }
+}
+
+OnlineActionType _actionTypeFromJson(String? value) {
+  return switch (value) {
+    'pass' => OnlineActionType.pass,
+    'new_lead' => OnlineActionType.newLead,
+    _ => OnlineActionType.play,
+  };
+}
+
+OnlineActionSource _actionSourceFromJson(String? value) {
+  return switch (value) {
+    'ai' => OnlineActionSource.ai,
+    'timeout' => OnlineActionSource.timeout,
+    _ => OnlineActionSource.player,
+  };
 }
 
 CardInstance _cardFromJson(Map<String, dynamic> json) {

@@ -13,6 +13,7 @@ class TableCenter extends StatelessWidget {
     required this.currentPlayer,
     required this.passCount,
     this.playedCards = const [],
+    this.width = 250,
     super.key,
   });
 
@@ -21,6 +22,7 @@ class TableCenter extends StatelessWidget {
   final String currentPlayer;
   final int passCount;
   final List<CardInstance> playedCards;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
@@ -28,11 +30,11 @@ class TableCenter extends StatelessWidget {
     final byText = lastPlayedBy == null ? '等待首出' : '上手：$lastPlayedBy';
 
     return Container(
-      width: 250,
+      width: width,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.tableDark,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0x5579D98B)),
       ),
       child: Column(

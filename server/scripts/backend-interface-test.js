@@ -374,6 +374,52 @@ function findPlayableCards(hand, target) {
   return candidates.find((cards) => canBeat(evaluateCombo(cards), target)) || [];
 }
 
+async function waitForHumanTurn(label) {
+  const ownerSocket = context.startedSockets[0];
+  const joinedSocket = context.startedSockets[1];
+  const ownerSeat = context.startedOwner.self.seatIndex;
+  const joinedSeat = context.startedJoined.self.seatIndex;
+
+  for (let attempt = 1; attempt <= 6; attempt += 1) {
+    const ownerRequestId = `${label}_owner_${attempt}`;
+    const joinedRequestId = `${label}_joined_${attempt}`;
+    ownerSocket.send('sync_state', ownerRequestId);
+    joinedSocket.send('sync_state', joinedRequestId);
+    const ownerSnapshot = await ownerSocket.waitFor(
+      (message) => message.type === 'table_snapshot' && message.requestId === ownerRequestId,
+      `${label} owner 快照 ${attempt}`,
+    );
+    const joinedSnapshot = await joinedSocket.waitFor(
+      (message) => message.type === 'table_snapshot' && message.requestId === joinedRequestId,
+      `${label} joined 快照 ${attempt}`,
+    );
+    const currentSeat = ownerSnapshot.payload.tableState.currentTurnSeatIndex;
+    if (currentSeat === ownerSeat) {
+      return {
+        socket: ownerSocket,
+        snapshot: ownerSnapshot,
+        seatIndex: ownerSeat,
+      };
+    }
+    if (currentSeat === joinedSeat) {
+      return {
+        socket: joinedSocket,
+        snapshot: joinedSnapshot,
+        seatIndex: joinedSeat,
+      };
+    }
+
+    await ownerSocket.waitFor(
+      (message) => message.payload?.tableState &&
+        message.payload.tableState.currentTurnSeatIndex !== currentSeat,
+      `${label} 等待 AI 行动 ${attempt}`,
+      9000,
+    ).catch(() => null);
+  }
+
+  throw new Error('等待 6 次后当前回合仍未轮到测试中的真人玩家');
+}
+
 async function cleanup() {
   for (const socket of context.startedSockets) {
     try {
@@ -703,17 +749,9 @@ async function runWebSocketTests() {
   });
 
   await check('W13', 'WebSocket', '当前玩家提交不存在的牌被拒绝', 'WS play_cards', async () => {
-    const ownerSocket = context.startedSockets[0];
-    const joinedSocket = context.startedSockets[1];
-    ownerSocket.send('sync_state', 'owner_invalid_card_probe');
-    const snapshot = await ownerSocket.waitFor(
-      (message) => message.type === 'table_snapshot' && message.requestId === 'owner_invalid_card_probe',
-      '当前玩家探测快照',
-    );
-    const currentSeat = snapshot.payload.tableState.currentTurnSeatIndex;
-    const currentSocket = currentSeat === context.startedOwner.self.seatIndex ? ownerSocket : joinedSocket;
-    currentSocket.send('play_cards', 'invalid_cards', { cardIds: ['not-a-card'] });
-    const error = await currentSocket.waitFor(
+    const turn = await waitForHumanTurn('invalid_card_probe');
+    turn.socket.send('play_cards', 'invalid_cards', { cardIds: ['not-a-card'] });
+    const error = await turn.socket.waitFor(
       (message) => message.type === 'error' && message.requestId === 'invalid_cards',
       '不存在牌错误响应',
     );
@@ -721,20 +759,12 @@ async function runWebSocketTests() {
   });
 
   await check('W14', 'WebSocket', '当前玩家领出时不能过牌', 'WS pass', async () => {
-    const ownerSocket = context.startedSockets[0];
-    const joinedSocket = context.startedSockets[1];
-    ownerSocket.send('sync_state', 'pass_probe');
-    const snapshot = await ownerSocket.waitFor(
-      (message) => message.type === 'table_snapshot' && message.requestId === 'pass_probe',
-      'pass probe',
-    );
-    if (snapshot.payload.tableState.tableCombo) {
+    const turn = await waitForHumanTurn('pass_probe');
+    if (turn.snapshot.payload.tableState.tableCombo) {
       return '当前桌面已有牌，此局面不是领出，跳过领出过牌校验';
     }
-    const currentSeat = snapshot.payload.tableState.currentTurnSeatIndex;
-    const currentSocket = currentSeat === context.startedOwner.self.seatIndex ? ownerSocket : joinedSocket;
-    currentSocket.send('pass', 'lead_pass');
-    const error = await currentSocket.waitFor(
+    turn.socket.send('pass', 'lead_pass');
+    const error = await turn.socket.waitFor(
       (message) => message.type === 'error' && message.requestId === 'lead_pass',
       '领出过牌错误响应',
     );
@@ -742,26 +772,14 @@ async function runWebSocketTests() {
   });
 
   await check('W15', 'WebSocket', '当前玩家合法出牌或可过牌操作', 'WS play_cards/pass', async () => {
-    const ownerSocket = context.startedSockets[0];
-    const joinedSocket = context.startedSockets[1];
-    ownerSocket.send('sync_state', 'owner_play_probe');
-    joinedSocket.send('sync_state', 'joined_play_probe');
-    const ownerSnapshot = await ownerSocket.waitFor(
-      (message) => message.type === 'table_snapshot' && message.requestId === 'owner_play_probe',
-      'owner play probe',
+    const turn = await waitForHumanTurn('play_probe');
+    const playable = findPlayableCards(
+      turn.snapshot.payload.myHand,
+      turn.snapshot.payload.tableState.tableCombo,
     );
-    const joinedSnapshot = await joinedSocket.waitFor(
-      (message) => message.type === 'table_snapshot' && message.requestId === 'joined_play_probe',
-      'joined play probe',
-    );
-    const currentSeat = ownerSnapshot.payload.tableState.currentTurnSeatIndex;
-    const isOwnerTurn = currentSeat === context.startedOwner.self.seatIndex;
-    const currentSocket = isOwnerTurn ? ownerSocket : joinedSocket;
-    const currentSnapshot = isOwnerTurn ? ownerSnapshot : joinedSnapshot;
-    const playable = findPlayableCards(currentSnapshot.payload.myHand, currentSnapshot.payload.tableState.tableCombo);
     if (playable.length > 0) {
-      currentSocket.send('play_cards', 'valid_play', { cardIds: playable.map((card) => card.cardId) });
-      const message = await currentSocket.waitFor(
+      turn.socket.send('play_cards', 'valid_play', { cardIds: playable.map((card) => card.cardId) });
+      const message = await turn.socket.waitFor(
         (candidate) => candidate.requestId === 'valid_play' &&
           (candidate.type === 'table_snapshot' || candidate.type === 'game_started' || candidate.type === 'error'),
         '合法出牌响应',
@@ -770,9 +788,9 @@ async function runWebSocketTests() {
       assert(message.payload.tableState.status === 'playing' || message.payload.tableState.status === 'settled', '出牌后状态异常');
       return `提交 ${playable.length} 张牌成功`;
     }
-    assert(currentSnapshot.payload.tableState.tableCombo, '无可出牌且桌面无目标牌，无法验证过牌');
-    currentSocket.send('pass', 'valid_pass');
-    const message = await currentSocket.waitFor(
+    assert(turn.snapshot.payload.tableState.tableCombo, '无可出牌且桌面无目标牌，无法验证过牌');
+    turn.socket.send('pass', 'valid_pass');
+    const message = await turn.socket.waitFor(
       (candidate) => candidate.requestId === 'valid_pass' &&
         (candidate.type === 'player_passed' || candidate.type === 'new_lead_started' || candidate.type === 'table_snapshot' || candidate.type === 'error'),
       '合法过牌响应',

@@ -30,47 +30,58 @@ class HandArea extends StatelessWidget {
             ? '${combo.label}${canPlay ? '，可以出' : '，压不过上家'}'
             : combo.label;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      decoration: const BoxDecoration(
-        color: AppTheme.panel,
-        border: Border(top: BorderSide(color: Color(0x22333333))),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                '我的手牌 ${cards.length}',
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  status,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: selectedCount == 0
-                        ? AppTheme.textSecondary
-                        : canPlay
-                            ? AppTheme.success
-                            : AppTheme.danger,
-                    fontWeight: FontWeight.w700,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        decoration: BoxDecoration(
+          color: AppTheme.panel,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0x22333333)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.16),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '我的手牌 ${cards.length}',
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _StackedHandScroller(
-            cards: cards,
-            onToggle: onToggle,
-          ),
-        ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    status,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: selectedCount == 0
+                          ? AppTheme.textSecondary
+                          : canPlay
+                              ? AppTheme.success
+                              : AppTheme.danger,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _StackedHandScroller(
+              cards: cards,
+              onToggle: onToggle,
+            ),
+          ],
+        ),
       ),
     );
   }

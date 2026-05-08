@@ -28,6 +28,7 @@ class HandCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cardWidth = width ?? (compact ? 40.0 : 48.0);
     final cardHeight = height ?? (compact ? 58.0 : 70.0);
+    const cardRadius = 5.0;
 
     return GestureDetector(
       onTap: onTap,
@@ -42,7 +43,7 @@ class HandCard extends StatelessWidget {
           bottom: showSelectionOffset && card.selected ? 14 : 0,
         ),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(cardRadius),
           boxShadow: [
             if (card.selected)
               BoxShadow(
@@ -56,7 +57,7 @@ class HandCard extends StatelessWidget {
           card: _toPlayingCard(card),
           elevation: card.selected ? 5 : 2,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: BorderRadius.circular(cardRadius),
             side: BorderSide(
               color: card.selected ? AppTheme.teamGold : Colors.black26,
               width: card.selected ? 1.5 : 0.7,

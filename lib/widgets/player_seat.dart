@@ -9,12 +9,14 @@ class PlayerSeat extends StatelessWidget {
     required this.player,
     required this.isCurrent,
     required this.isAlly,
+    this.countdownSeconds,
     super.key,
   });
 
   final GamePlayer player;
   final bool isCurrent;
   final bool isAlly;
+  final int? countdownSeconds;
 
   @override
   Widget build(BuildContext context) {
@@ -26,9 +28,19 @@ class PlayerSeat extends StatelessWidget {
         color: AppTheme.panel,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isCurrent ? AppTheme.success : borderColor.withValues(alpha: 0.75),
+          color: isCurrent
+              ? AppTheme.success
+              : borderColor.withValues(alpha: 0.75),
           width: isCurrent ? 2 : 1.2,
         ),
+        boxShadow: [
+          if (isCurrent)
+            BoxShadow(
+              color: AppTheme.success.withValues(alpha: 0.24),
+              blurRadius: 18,
+              spreadRadius: 1,
+            ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -79,11 +91,22 @@ class PlayerSeat extends StatelessWidget {
       ),
     );
 
+    final seat = isCurrent && countdownSeconds != null
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _TurnCountdownPill(seconds: countdownSeconds!),
+              const SizedBox(height: 5),
+              content,
+            ],
+          )
+        : content;
+
     if (!isCurrent) {
-      return content;
+      return seat;
     }
 
-    return content
+    return seat
         .animate(onPlay: (controller) => controller.repeat(reverse: true))
         .scale(
           begin: const Offset(1, 1),
@@ -91,6 +114,49 @@ class PlayerSeat extends StatelessWidget {
           duration: 700.ms,
           curve: Curves.easeInOut,
         );
+  }
+}
+
+class _TurnCountdownPill extends StatelessWidget {
+  const _TurnCountdownPill({required this.seconds});
+
+  final int seconds;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.tableDark.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.teamGold.withValues(alpha: 0.85)),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.teamGold.withValues(alpha: 0.18),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.timer_outlined,
+            size: 13,
+            color: AppTheme.teamCyan,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '${seconds}s',
+            style: const TextStyle(
+              color: AppTheme.teamGold,
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

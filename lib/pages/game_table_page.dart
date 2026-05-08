@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,6 +30,8 @@ class GameTablePage extends StatefulWidget {
 }
 
 class _GameTablePageState extends State<GameTablePage> {
+  static const int _turnDurationSeconds = 10;
+
   final RuleEngine _engine = const RuleEngine();
   final List<String> _logs = [];
   final List<FinishedSeat> _finishOrder = [];
@@ -45,6 +48,8 @@ class _GameTablePageState extends State<GameTablePage> {
   int _teamAScore = 0;
   int _teamBScore = 0;
   bool _aiRunning = false;
+  int _turnSecondsRemaining = _turnDurationSeconds;
+  Timer? _turnTimer;
   RoundResult? _roundResult;
 
   List<CardInstance> get _myHand => _hands[0];
@@ -69,11 +74,13 @@ class _GameTablePageState extends State<GameTablePage> {
     super.initState();
     unawaited(_setLandscape());
     _startRound(resetScores: true);
+    _restartTurnCountdown(notify: false);
     WidgetsBinding.instance.addPostFrameCallback((_) => _kickAiIfNeeded());
   }
 
   @override
   void dispose() {
+    _turnTimer?.cancel();
     unawaited(_setPortrait());
     super.dispose();
   }
@@ -114,7 +121,10 @@ class _GameTablePageState extends State<GameTablePage> {
                           ),
                           SizedBox(
                             width: 360,
-                            child: _buildHandAndActions(),
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: _buildHandAndActions(),
+                            ),
                           ),
                         ],
                       ),
@@ -154,45 +164,51 @@ class _GameTablePageState extends State<GameTablePage> {
     required String? lastPlayedBy,
   }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-      child: Stack(
-        children: [
-          Align(
-            alignment: Alignment.center,
-            child: Container(
-              width: 300,
-              height: 190,
-              decoration: BoxDecoration(
-                color: AppTheme.tableGreen,
-                borderRadius: BorderRadius.circular(96),
-                border: Border.all(color: const Color(0x6679D98B)),
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 14),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final tableWidth = math.min(330.0, constraints.maxWidth * 0.58);
+          final tableHeight = math.max(164.0, tableWidth * 0.58);
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Align(
+                alignment: Alignment.center,
+                child: SizedBox(
+                  width: tableWidth,
+                  height: tableHeight,
+                  child: const _TableMat(),
+                ),
               ),
-            ),
-          ),
-          Align(
-            alignment: Alignment.center,
-            child: TableCenter(
-              activeCombo: _activeCombo,
-              playedCards: _lastPlayedCards,
-              lastPlayedBy: lastPlayedBy,
-              currentPlayer: currentPlayer.name,
-              passCount: _passCount,
-            ),
-          ),
-          for (var seat = 0; seat < _players.length; seat += 1)
-            Align(
-              alignment: _seatAlignment(seat),
-              child: PlayerSeat(
-                player: _players[seat],
-                isCurrent: seat == _currentSeat && _roundResult == null,
-                isAlly: _players[seat].team == _players[0].team,
+              Align(
+                alignment: Alignment.center,
+                child: TableCenter(
+                  activeCombo: _activeCombo,
+                  playedCards: _lastPlayedCards,
+                  lastPlayedBy: lastPlayedBy,
+                  currentPlayer: currentPlayer.name,
+                  passCount: _passCount,
+                ),
               ),
-            ),
-          Align(
-            alignment: const Alignment(0, 0.68),
-            child: _FinishOrderBar(finishOrder: _finishOrder),
-          ),
-        ],
+              for (var seat = 0; seat < _players.length; seat += 1)
+                Align(
+                  alignment: _seatAlignment(seat),
+                  child: PlayerSeat(
+                    player: _players[seat],
+                    isCurrent: seat == _currentSeat && _roundResult == null,
+                    isAlly: _players[seat].team == _players[0].team,
+                    countdownSeconds:
+                        seat == _currentSeat ? _turnSecondsRemaining : null,
+                  ),
+                ),
+              Align(
+                alignment: const Alignment(0, 0.58),
+                child: _FinishOrderBar(finishOrder: _finishOrder),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -222,12 +238,12 @@ class _GameTablePageState extends State<GameTablePage> {
 
   Alignment _seatAlignment(int seat) {
     return switch (seat) {
-      0 => const Alignment(0, 0.98),
-      1 => const Alignment(-0.83, 0.46),
-      2 => const Alignment(-0.83, -0.46),
-      3 => const Alignment(0, -0.98),
-      4 => const Alignment(0.83, -0.46),
-      5 => const Alignment(0.83, 0.46),
+      0 => const Alignment(0, 0.88),
+      1 => const Alignment(-0.92, 0.42),
+      2 => const Alignment(-0.92, -0.42),
+      3 => const Alignment(0, -0.84),
+      4 => const Alignment(0.92, -0.42),
+      5 => const Alignment(0.92, 0.42),
       _ => Alignment.center,
     };
   }
@@ -289,6 +305,7 @@ class _GameTablePageState extends State<GameTablePage> {
     _lastPlayedCards = [];
     _lastPlayedSeat = null;
     _currentSeat = _findFirstLeadSeat(hands);
+    _turnSecondsRemaining = _turnDurationSeconds;
     _passCount = 0;
     _logs
       ..clear()
@@ -437,6 +454,7 @@ class _GameTablePageState extends State<GameTablePage> {
     });
 
     HapticFeedback.lightImpact();
+    _restartTurnCountdown();
     _kickAiIfNeeded();
   }
 
@@ -467,7 +485,70 @@ class _GameTablePageState extends State<GameTablePage> {
     });
 
     HapticFeedback.selectionClick();
+    _restartTurnCountdown();
     _kickAiIfNeeded();
+  }
+
+  void _restartTurnCountdown({bool notify = true}) {
+    _turnTimer?.cancel();
+    if (_roundResult != null || _activePlayerCount <= 1) {
+      return;
+    }
+
+    void resetSeconds() {
+      _turnSecondsRemaining = _turnDurationSeconds;
+    }
+
+    if (notify && mounted) {
+      setState(resetSeconds);
+    } else {
+      resetSeconds();
+    }
+
+    _turnTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _roundResult != null) {
+        timer.cancel();
+        return;
+      }
+
+      if (_turnSecondsRemaining <= 1) {
+        timer.cancel();
+        _handleTurnTimeout();
+        return;
+      }
+
+      setState(() {
+        _turnSecondsRemaining -= 1;
+      });
+    });
+  }
+
+  void _handleTurnTimeout() {
+    if (_roundResult != null) {
+      return;
+    }
+
+    final seat = _currentSeat;
+    _logs.add('${_players[seat].name} 超时托管');
+    _autoPlaySeat(seat);
+  }
+
+  void _autoPlaySeat(int seat) {
+    final suggestion = _engine.suggest(_hands[seat], _activeCombo);
+    if (suggestion.isNotEmpty) {
+      _playCards(seat, suggestion, _engine.evaluate(suggestion));
+      return;
+    }
+
+    if (_activeCombo == null && _hands[seat].isNotEmpty) {
+      final fallback = [_hands[seat].first];
+      _playCards(seat, fallback, _engine.evaluate(fallback));
+      return;
+    }
+
+    if (_activeCombo != null) {
+      _passSeat(seat);
+    }
   }
 
   Future<void> _setLandscape() async {
@@ -658,6 +739,7 @@ class _GameTablePageState extends State<GameTablePage> {
                   _round += 1;
                   _startRound(resetScores: false);
                 });
+                _restartTurnCountdown();
                 _kickAiIfNeeded();
               },
               child: const Text('下一局'),
@@ -789,6 +871,64 @@ class _TableHeader extends StatelessWidget {
             icon: const Icon(Icons.receipt_long_outlined),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TableMat extends StatelessWidget {
+  const _TableMat();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(96),
+        gradient: const RadialGradient(
+          center: Alignment(0, -0.18),
+          radius: 0.9,
+          colors: [
+            Color(0xFF1F8A68),
+            AppTheme.tableGreen,
+            Color(0xFF0D4037),
+          ],
+          stops: [0, 0.58, 1],
+        ),
+        border: Border.all(color: const Color(0x8859D68B), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.34),
+            blurRadius: 26,
+            offset: const Offset(0, 12),
+          ),
+          BoxShadow(
+            color: AppTheme.success.withValues(alpha: 0.14),
+            blurRadius: 22,
+            spreadRadius: -2,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(82),
+            border: Border.all(color: const Color(0x3379D98B), width: 1),
+          ),
+          child: Align(
+            alignment: const Alignment(0, -0.08),
+            child: FractionallySizedBox(
+              widthFactor: 0.54,
+              heightFactor: 0.18,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  color: Colors.white.withValues(alpha: 0.06),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

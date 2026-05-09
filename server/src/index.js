@@ -936,6 +936,18 @@ app.use('/play', express.static(WEB_PLAY_DIR, { index: 'index.html' }));
 app.get(/^\/play(?:\/.*)?$/, (_req, res) => {
   res.sendFile(path.join(WEB_PLAY_DIR, 'index.html'));
 });
+app.get(['/downloads/android', '/downloads/android/'], async (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  try {
+    const releases = await appUpdates.listPublishedAndroidApks();
+    res.type('html').send(renderAndroidDownloadsPage(releases));
+  } catch (error) {
+    console.error('[app-update] downloads page failed', error);
+    res.status(500).type('html').send(renderAndroidDownloadsPage([], {
+      error: 'APK 列表暂时不可用，请稍后再试。',
+    }));
+  }
+});
 app.use('/downloads/android', express.static(APP_RELEASE_ANDROID_DIR, {
   fallthrough: false,
   immutable: true,
@@ -1010,6 +1022,25 @@ app.get('/api/v1/app-updates/latest', async (req, res) => {
   }
 });
 
+app.get('/api/v1/app-updates/releases/android', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  try {
+    const releases = await appUpdates.listPublishedAndroidApks();
+    return ok(req, res, {
+      platform: 'android',
+      count: releases.length,
+      releases,
+    });
+  } catch (error) {
+    if (error instanceof SyntaxError || String(error.code || '').startsWith('INVALID')) {
+      console.error('[app-update] invalid release list manifest', error.message);
+      return fail(req, res, 500, 'APP_UPDATE_MANIFEST_INVALID', '版本清单不可用');
+    }
+    console.error('[app-update] release list failed', error);
+    return fail(req, res, 500, 'APP_UPDATE_UNAVAILABLE', '版本列表暂时不可用');
+  }
+});
+
 app.get('/api/v1/app-updates/releases/:platform/:versionCode', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   const platform = req.params.platform;
@@ -1038,6 +1069,233 @@ app.get('/api/v1/app-updates/releases/:platform/:versionCode', async (req, res) 
     return fail(req, res, 500, 'APP_UPDATE_UNAVAILABLE', '版本检查暂时不可用');
   }
 });
+
+function renderAndroidDownloadsPage(releases, options = {}) {
+  const rows = releases.map((release) => {
+    const title = release.versionName
+      ? `DoorSix ${release.versionName}+${release.versionCode}`
+      : release.fileName;
+    const status = release.status === 'active'
+      ? '可下载'
+      : release.status === 'file'
+        ? '文件'
+        : release.status;
+    const notes = release.releaseNotes?.length
+      ? `<ul>${release.releaseNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>`
+      : '<span class="muted">暂无发布说明</span>';
+    return `
+      <article class="release">
+        <div class="release-main">
+          <div>
+            <h2>${escapeHtml(title)}</h2>
+            <p>${escapeHtml(release.fileName || 'DoorSix.apk')}</p>
+          </div>
+          <span class="status">${escapeHtml(status)}</span>
+        </div>
+        <dl>
+          <div><dt>大小</dt><dd>${formatBytes(release.fileSizeBytes)}</dd></div>
+          <div><dt>发布时间</dt><dd>${formatDateTime(release.publishedAt || release.modifiedAt)}</dd></div>
+          ${release.sha256 ? `<div><dt>SHA-256</dt><dd><code>${escapeHtml(release.sha256)}</code></dd></div>` : ''}
+        </dl>
+        <div class="notes">${notes}</div>
+        <a class="download" href="${escapeAttribute(release.downloadUrl)}">下载 APK</a>
+      </article>
+    `;
+  }).join('');
+
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DoorSix APK 下载</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10201c;
+      --panel: #172b31;
+      --line: rgba(121, 217, 139, 0.18);
+      --gold: #f4c45b;
+      --success: #79d98b;
+      --text: #f6f1e7;
+      --muted: #afc1bd;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main {
+      width: min(880px, 100%);
+      margin: 0 auto;
+      padding: 28px 16px 44px;
+    }
+    header {
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+    header p, .muted {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+      font-weight: 700;
+    }
+    .error {
+      margin: 16px 0;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(232, 93, 90, 0.42);
+      color: #ffd8d6;
+      background: rgba(232, 93, 90, 0.12);
+    }
+    .release {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      margin-top: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .release-main {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      justify-content: space-between;
+    }
+    h2 {
+      margin: 0 0 4px;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+    .release-main p {
+      margin: 0;
+      color: var(--muted);
+      word-break: break-all;
+    }
+    .status {
+      flex: 0 0 auto;
+      border: 1px solid rgba(244, 196, 91, 0.4);
+      border-radius: 8px;
+      padding: 4px 8px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    dl {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+    }
+    dl > div {
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr);
+      gap: 10px;
+    }
+    dt {
+      color: var(--muted);
+      font-weight: 800;
+    }
+    dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    code {
+      font-size: 12px;
+      color: var(--success);
+    }
+    ul {
+      margin: 0;
+      padding-left: 20px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .download {
+      display: inline-flex;
+      width: fit-content;
+      min-height: 44px;
+      align-items: center;
+      border-radius: 8px;
+      padding: 0 16px;
+      color: #18221f;
+      background: var(--gold);
+      text-decoration: none;
+      font-weight: 900;
+    }
+    .empty {
+      margin-top: 16px;
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--muted);
+      font-weight: 800;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>DoorSix APK 下载</h1>
+      <p>这里列出服务器上已经发布的 Android 安装包。</p>
+    </header>
+    ${options.error ? `<div class="error">${escapeHtml(options.error)}</div>` : ''}
+    ${rows || '<div class="empty">暂无可下载 APK。</div>'}
+  </main>
+</body>
+</html>`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value);
+}
+
+function formatBytes(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '未知';
+  }
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function formatDateTime(value) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return '未知';
+  }
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(timestamp));
+}
 
 async function enforceSupportedAppVersion(req, res, next) {
   const rawVersionCode = req.headers['x-app-version-code'];

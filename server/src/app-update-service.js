@@ -10,6 +10,16 @@ function defaultManifestPath() {
     '/opt/doorsix/releases/manifests/latest-android-stable.json';
 }
 
+function defaultAndroidReleaseDir() {
+  return process.env.APP_RELEASE_ANDROID_DIR ||
+    '/opt/doorsix/releases/android';
+}
+
+function defaultAndroidDownloadBaseUrl() {
+  return process.env.APP_UPDATE_DOWNLOAD_BASE_URL ||
+    `${process.env.PUBLIC_BASE_URL || 'http://39.104.67.175'}/downloads/android`;
+}
+
 function defaultEnvironment() {
   return process.env.APP_UPDATE_ENVIRONMENT || 'prod';
 }
@@ -50,6 +60,92 @@ async function loadReleaseByVersionCode({ platform = 'android', versionCode }) {
     }
   }
   return null;
+}
+
+async function listPublishedAndroidApks() {
+  const [releases, files] = await Promise.all([
+    loadReleaseManifests({ platform: 'android' }),
+    listApkFiles(defaultAndroidReleaseDir()),
+  ]);
+  const fileByRelativePath = new Map(
+    files.map((file) => [file.relativePath, file]),
+  );
+  const listedFilePaths = new Set();
+
+  const releaseItems = releases.map((release) => {
+    const relativePath = relativeApkPathFromUrl(release.downloadUrl);
+    const file = relativePath ? fileByRelativePath.get(relativePath) : null;
+    if (relativePath) {
+      listedFilePaths.add(relativePath);
+    }
+    return {
+      ...publicReleasePayload(release),
+      id: release.id || `android-${release.versionCode}`,
+      platform: release.platform,
+      channel: release.channel,
+      environment: release.environment,
+      status: release.status,
+      available: release.status === 'active',
+      fileName: file?.fileName || fileNameFromUrl(release.downloadUrl),
+      source: 'manifest',
+      modifiedAt: file?.modifiedAt || null,
+    };
+  });
+
+  const looseFileItems = files
+    .filter((file) => !listedFilePaths.has(file.relativePath))
+    .map((file) => ({
+      id: `android-file-${file.relativePath}`,
+      platform: 'android',
+      channel: null,
+      environment: defaultEnvironment(),
+      versionName: null,
+      versionCode: null,
+      title: file.fileName,
+      releaseNotes: [],
+      downloadUrl: downloadUrlForRelativePath(file.relativePath),
+      fileSizeBytes: file.fileSizeBytes,
+      sha256: null,
+      publishedAt: file.modifiedAt,
+      status: 'file',
+      available: true,
+      fileName: file.fileName,
+      source: 'file',
+      modifiedAt: file.modifiedAt,
+    }));
+
+  return [...releaseItems, ...looseFileItems].sort(compareReleaseItems);
+}
+
+async function loadReleaseManifests({ platform = 'android' } = {}) {
+  if (platform !== 'android') {
+    throw validationError('UNSUPPORTED_PLATFORM', 'platform must be android');
+  }
+
+  const manifestDir = path.dirname(defaultManifestPath());
+  let names;
+  try {
+    names = await fs.readdir(manifestDir);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+
+  const releases = [];
+  for (const name of names) {
+    if (!name.startsWith('release-android-') || !name.endsWith('.json')) {
+      continue;
+    }
+    const raw = await fs.readFile(path.join(manifestDir, name), 'utf8');
+    const release = JSON.parse(raw);
+    validateRelease(release);
+    if (release.platform === platform) {
+      releases.push(release);
+    }
+  }
+  return releases;
 }
 
 function decideUpdate({ release, clientVersionCode, deviceId, requestSeed }) {
@@ -126,6 +222,91 @@ function publicReleasePayload(release) {
   };
 }
 
+async function listApkFiles(rootDir) {
+  async function walk(currentDir, prefix = '') {
+    let entries;
+    try {
+      entries = await fs.readdir(currentDir, { withFileTypes: true });
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return [];
+      }
+      throw error;
+    }
+
+    const files = [];
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) {
+        continue;
+      }
+      const absolutePath = path.join(currentDir, entry.name);
+      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        files.push(...await walk(absolutePath, relativePath));
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.apk')) {
+        continue;
+      }
+      const stat = await fs.stat(absolutePath);
+      files.push({
+        relativePath,
+        fileName: entry.name,
+        fileSizeBytes: stat.size,
+        modifiedAt: stat.mtime.toISOString(),
+      });
+    }
+    return files;
+  }
+
+  return walk(rootDir);
+}
+
+function relativeApkPathFromUrl(downloadUrl) {
+  try {
+    const url = new URL(downloadUrl);
+    const marker = '/downloads/android/';
+    const index = url.pathname.indexOf(marker);
+    if (index < 0) {
+      return null;
+    }
+    return decodeURIComponent(url.pathname.slice(index + marker.length));
+  } catch (_) {
+    return null;
+  }
+}
+
+function fileNameFromUrl(downloadUrl) {
+  try {
+    const url = new URL(downloadUrl);
+    return decodeURIComponent(path.posix.basename(url.pathname));
+  } catch (_) {
+    return 'DoorSix.apk';
+  }
+}
+
+function downloadUrlForRelativePath(relativePath) {
+  const encodedPath = relativePath
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+  return `${defaultAndroidDownloadBaseUrl().replace(/\/+$/, '')}/${encodedPath}`;
+}
+
+function compareReleaseItems(left, right) {
+  if (left.versionCode != null && right.versionCode != null) {
+    return right.versionCode - left.versionCode;
+  }
+  if (left.versionCode != null) {
+    return -1;
+  }
+  if (right.versionCode != null) {
+    return 1;
+  }
+  return Date.parse(right.publishedAt || right.modifiedAt || 0) -
+    Date.parse(left.publishedAt || left.modifiedAt || 0);
+}
+
 function requestSeedFor(req) {
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '');
   const ua = String(req.headers['user-agent'] || '');
@@ -175,12 +356,16 @@ function assertAbsoluteHttpUrl(value, name) {
 
 module.exports = {
   decideUpdate,
+  defaultAndroidDownloadBaseUrl,
+  defaultAndroidReleaseDir,
   defaultChannel,
   defaultEnvironment,
   defaultManifestPath,
   isRolloutMatched,
+  listPublishedAndroidApks,
   loadLatestRelease,
   loadReleaseByVersionCode,
+  loadReleaseManifests,
   publicReleasePayload,
   requestSeedFor,
   validateRelease,

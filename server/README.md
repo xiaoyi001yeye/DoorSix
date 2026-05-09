@@ -39,4 +39,8 @@ REMOTE_BASE_URL=http://example.com npm run test:remote
 - `GET /api/v1/rooms/:roomId/snapshot`
 - `GET /api/v1/players/me/stats`
 - `GET /api/v1/rooms/:roomId/history`
+- `GET /api/v1/app-updates/latest`
+- `GET /api/v1/app-updates/releases/android`
+- `GET /api/v1/app-updates/releases/:platform/:versionCode`
+- `GET /downloads/android`
 - `WS /ws/v1/tables/:roomId?playerToken=...`

@@ -60,6 +60,16 @@ test('creates a room and starts a WebSocket game', async (t) => {
 
   await waitForHealth(baseUrl);
 
+  const releaseList = await fetch(`${baseUrl}/api/v1/app-updates/releases/android`)
+    .then((response) => response.json());
+  assert.equal(releaseList.success, true);
+  assert.equal(releaseList.data.platform, 'android');
+  assert.ok(Array.isArray(releaseList.data.releases));
+
+  const downloadsPage = await fetch(`${baseUrl}/downloads/android`);
+  assert.equal(downloadsPage.ok, true);
+  assert.match(await downloadsPage.text(), /DoorSix APK 下载/);
+
   const created = await fetch(`${baseUrl}/api/v1/rooms`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

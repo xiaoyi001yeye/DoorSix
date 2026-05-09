@@ -120,6 +120,15 @@ jobs:
       - name: Prepare Android scaffold
         run: ./scripts/prepare_android.sh
 
+      - name: Configure Android release signing
+        env:
+          REQUIRE_ANDROID_SIGNING: ${{ steps.release_gate.outputs.should_publish }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./scripts/configure_android_signing.sh
+
       - name: Get dependencies
         run: flutter pub get
 

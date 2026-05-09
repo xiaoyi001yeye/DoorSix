@@ -1,0 +1,155 @@
+name: Inspect Android APK Signature
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      apkUrl:
+        type: string
+        required: false
+        description: 'Optional public APK URL to inspect, for example http://39.104.67.175/downloads/android/...apk'
+      buildCurrentApk:
+        type: boolean
+        default: true
+        description: 'Build and inspect the current repository release APK'
+      releaseChannel:
+        type: string
+        default: stable
+        description: 'Release channel used when building the current APK'
+
+env:
+  FLUTTER_VERSION: '3.41.9'
+  DOORSIX_API_BASE_URL: 'http://39.104.67.175'
+
+jobs:
+  inspect-signature:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      - name: Setup Flutter
+        if: inputs.buildCurrentApk
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Read Flutter version
+        if: inputs.buildCurrentApk
+        id: version
+        run: |
+          version_json="$(node scripts/print_flutter_version.js)"
+          node -e '
+            const v = JSON.parse(process.argv[1]);
+            console.log(`version_name=${v.versionName}`);
+            console.log(`version_code=${v.versionCode}`);
+            console.log(`pubspec_version=${v.pubspecVersion}`);
+          ' "$version_json" >> "$GITHUB_OUTPUT"
+
+      - name: Download APK from URL
+        if: inputs.apkUrl != ''
+        env:
+          APK_URL: ${{ inputs.apkUrl }}
+        run: |
+          mkdir -p signature-inputs
+          curl -fL --retry 3 --retry-delay 2 "$APK_URL" -o signature-inputs/downloaded.apk
+
+      - name: Prepare Android scaffold
+        if: inputs.buildCurrentApk
+        run: ./scripts/prepare_android.sh
+
+      - name: Configure Android release signing
+        if: inputs.buildCurrentApk
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./scripts/configure_android_signing.sh
+
+      - name: Get dependencies
+        if: inputs.buildCurrentApk
+        run: flutter pub get
+
+      - name: Build current release APK
+        if: inputs.buildCurrentApk
+        run: |
+          flutter build apk --release \
+            --dart-define=DOORSIX_API_BASE_URL=${{ env.DOORSIX_API_BASE_URL }} \
+            --dart-define=DOORSIX_RELEASE_CHANNEL=${{ inputs.releaseChannel }} \
+            --dart-define=DOORSIX_APP_VERSION_NAME=${{ steps.version.outputs.version_name }} \
+            --dart-define=DOORSIX_APP_VERSION_CODE=${{ steps.version.outputs.version_code }}
+          mkdir -p signature-inputs
+          cp build/app/outputs/flutter-apk/app-release.apk signature-inputs/current-build.apk
+
+      - name: Inspect APK signature certificates
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$sdk_root" ]; then
+            echo "ANDROID_HOME or ANDROID_SDK_ROOT is required." >&2
+            exit 1
+          fi
+
+          apksigner="$(find "$sdk_root/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          if [ -z "$apksigner" ]; then
+            echo "apksigner was not found under $sdk_root/build-tools." >&2
+            exit 1
+          fi
+
+          mkdir -p signature-reports
+          shopt -s nullglob
+          apk_files=(signature-inputs/*.apk)
+          if [ "${#apk_files[@]}" -eq 0 ]; then
+            echo "No APK was provided. Set apkUrl or enable buildCurrentApk." >&2
+            exit 1
+          fi
+
+          {
+            echo "### Android APK signature report"
+            echo
+            echo "Compare the certificate SHA-256 digest between APKs. Matching digests can overwrite each other when the package name and versionCode are valid."
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for apk in "${apk_files[@]}"; do
+            name="$(basename "$apk")"
+            report="signature-reports/${name%.apk}.txt"
+            cert_output="$("$apksigner" verify --print-certs "$apk")"
+            cert_sha256="$(printf '%s\n' "$cert_output" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ { print $2; exit }')"
+            file_sha256="$(sha256sum "$apk" | awk '{ print $1 }')"
+
+            {
+              echo "APK: $name"
+              echo "APK file SHA-256: $file_sha256"
+              echo "Signer certificate SHA-256: ${cert_sha256:-not found}"
+              echo
+              printf '%s\n' "$cert_output"
+            } | tee "$report"
+
+            {
+              echo "#### $name"
+              echo
+              echo "- APK file SHA-256: \`$file_sha256\`"
+              echo "- Signer certificate SHA-256: \`${cert_sha256:-not found}\`"
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload signature reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-signature-reports
+          path: signature-reports/*.txt
+          if-no-files-found: error

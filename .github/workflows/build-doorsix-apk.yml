@@ -129,6 +129,11 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./scripts/configure_android_signing.sh
 
+      - name: Inspect generated signing config
+        run: |
+          ls -l android/key.properties android/app/doorsix-release.jks 2>/dev/null || true
+          grep -RniE 'DoorSix release signing|signingConfigs|signingConfig' android/app/build.gradle* || true
+
       - name: Get dependencies
         run: flutter pub get
 

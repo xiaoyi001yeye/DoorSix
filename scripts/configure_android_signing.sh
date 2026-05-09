@@ -84,26 +84,31 @@ if (source.includes(marker)) {
 }
 
 if (gradlePath.endsWith('.kts')) {
-  const signingBlock = `
-    // DoorSix release signing
-    val doorsixKeystoreProperties = java.util.Properties()
-    val doorsixKeystorePropertiesFile = rootProject.file("key.properties")
-    if (doorsixKeystorePropertiesFile.exists()) {
-        doorsixKeystoreProperties.load(java.io.FileInputStream(doorsixKeystorePropertiesFile))
-    }
+  const propertiesBlock = `// DoorSix release signing
+val doorsixKeystoreProperties = java.util.Properties()
+val doorsixKeystorePropertiesFile = rootProject.file("key.properties")
+if (doorsixKeystorePropertiesFile.exists()) {
+    doorsixKeystoreProperties.load(java.io.FileInputStream(doorsixKeystorePropertiesFile))
+}
 
+`;
+  const signingBlock = `
     signingConfigs {
         create("release") {
             keyAlias = doorsixKeystoreProperties["keyAlias"] as String
             keyPassword = doorsixKeystoreProperties["keyPassword"] as String
-            storeFile = file(doorsixKeystoreProperties["storeFile"] as String)
+            storeFile = doorsixKeystoreProperties["storeFile"]?.let { file(it) }
             storePassword = doorsixKeystoreProperties["storePassword"] as String
         }
     }
 `;
+  if (!source.includes('android {')) {
+    throw new Error('Could not find android block in Kotlin Gradle file.');
+  }
   if (!source.includes('\n    buildTypes {')) {
     throw new Error('Could not find buildTypes block in Kotlin Gradle file.');
   }
+  source = source.replace('\nandroid {', `\n${propertiesBlock}android {`);
   source = source.replace('\n    buildTypes {', `${signingBlock}\n    buildTypes {`);
   source = source.replace(
     /signingConfig\s*=\s*signingConfigs\.getByName\("debug"\)/g,
@@ -138,7 +143,7 @@ if (doorsixKeystorePropertiesFile.exists()) {
   if (!source.includes('\n    buildTypes {')) {
     throw new Error('Could not find buildTypes block in Gradle file.');
   }
-  source = propertiesBlock + source;
+  source = source.replace('\nandroid {', `\n${propertiesBlock}android {`);
   source = source.replace('\n    buildTypes {', `${signingBlock}\n    buildTypes {`);
   source = source.replace(/signingConfig\s+signingConfigs\.debug/g, 'signingConfig signingConfigs.release');
   source = source.replace(/signingConfig\s*=\s*signingConfigs\.debug/g, 'signingConfig signingConfigs.release');

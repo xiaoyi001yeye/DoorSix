@@ -1,33 +1,70 @@
-name: Build DoorSix APK
+name: Build and Publish DoorSix Android
 
 permissions:
   contents: write
 
 on:
   workflow_dispatch:
+    inputs:
+      expectedVersion:
+        type: string
+        required: true
+        description: 'Must match pubspec.yaml version, for example 0.2.0+2'
+      forceUpdate:
+        type: boolean
+        default: false
+      minSupportedVersionCode:
+        type: string
+        default: '1'
+      rolloutPercentage:
+        type: string
+        default: '100'
   push:
     branches:
       - main
       - master
-    tags:
-      - 'doorsix-v*.*.*'
   pull_request:
     paths:
       - 'assets/**'
       - 'docs/**'
       - 'lib/**'
+      - 'server/**'
+      - 'scripts/**'
       - 'test/**'
       - 'analysis_options.yaml'
       - 'pubspec.yaml'
       - '.github/workflows/build-doorsix-apk.yml'
 
+env:
+  FLUTTER_VERSION: '3.41.9'
+  DOORSIX_API_BASE_URL: 'http://39.104.67.175'
+  RELEASE_HOST: ${{ secrets.RELEASE_HOST || '39.104.67.175' }}
+  RELEASE_REMOTE_DIR: ${{ secrets.RELEASE_REMOTE_DIR || '/opt/doorsix/releases' }}
+  RELEASE_PUBLIC_BASE_URL: ${{ secrets.RELEASE_PUBLIC_BASE_URL || 'http://39.104.67.175/downloads/android' }}
+  RELEASE_CHANNEL: stable
+  RELEASE_ENVIRONMENT: prod
+
+concurrency:
+  group: doorsix-android-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
 
+    outputs:
+      version_name: ${{ steps.version.outputs.version_name }}
+      version_code: ${{ steps.version.outputs.version_code }}
+      pubspec_version: ${{ steps.version.outputs.pubspec_version }}
+      expected_tag: ${{ steps.version.outputs.expected_tag }}
+      should_publish: ${{ steps.release_gate.outputs.should_publish }}
+      release_notes: ${{ steps.release_gate.outputs.release_notes }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -38,9 +75,47 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.9'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+
+      - name: Read Flutter version
+        id: version
+        run: |
+          version_json="$(node scripts/print_flutter_version.js)"
+          node -e '
+            const v = JSON.parse(process.argv[1]);
+            console.log(`version_name=${v.versionName}`);
+            console.log(`version_code=${v.versionCode}`);
+            console.log(`pubspec_version=${v.pubspecVersion}`);
+            console.log(`expected_tag=${v.expectedTag}`);
+          ' "$version_json" >> "$GITHUB_OUTPUT"
+
+      - name: Validate manual version input
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ inputs.expectedVersion }}" != "${{ steps.version.outputs.pubspec_version }}" ]; then
+            echo "workflow_dispatch expectedVersion must equal pubspec.yaml version" >&2
+            exit 1
+          fi
+
+      - name: Decide release publishing
+        id: release_gate
+        run: |
+          notes="docs/release-notes/android/${{ steps.version.outputs.pubspec_version }}.md"
+          should_publish=false
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            should_publish=true
+          elif [ "${{ github.event_name }}" = "push" ] && [ -f "$notes" ]; then
+            if git rev-parse -q --verify "refs/tags/${{ steps.version.outputs.expected_tag }}" >/dev/null; then
+              should_publish=false
+              echo "Tag ${{ steps.version.outputs.expected_tag }} already exists; build verification only." >> "$GITHUB_STEP_SUMMARY"
+            else
+              should_publish=true
+            fi
+          fi
+          echo "should_publish=${should_publish}" >> "$GITHUB_OUTPUT"
+          echo "release_notes=${notes}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare Android scaffold
         run: ./scripts/prepare_android.sh
@@ -55,34 +130,113 @@ jobs:
         run: flutter test
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release \
+            --dart-define=DOORSIX_API_BASE_URL=${{ env.DOORSIX_API_BASE_URL }} \
+            --dart-define=DOORSIX_RELEASE_CHANNEL=${{ env.RELEASE_CHANNEL }} \
+            --dart-define=DOORSIX_APP_VERSION_NAME=${{ steps.version.outputs.version_name }} \
+            --dart-define=DOORSIX_APP_VERSION_CODE=${{ steps.version.outputs.version_code }}
 
       - name: Rename APK artifact
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk \
-            build/app/outputs/flutter-apk/doorsix-release.apk
+            build/app/outputs/flutter-apk/door_six-${{ steps.version.outputs.pubspec_version }}-${{ env.RELEASE_CHANNEL }}.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: doorsix-release-apk
-          path: build/app/outputs/flutter-apk/doorsix-release.apk
+          name: doorsix-android-${{ steps.version.outputs.pubspec_version }}
+          path: build/app/outputs/flutter-apk/door_six-${{ steps.version.outputs.pubspec_version }}-${{ env.RELEASE_CHANNEL }}.apk
           if-no-files-found: error
 
-  release:
-    if: startsWith(github.ref, 'refs/tags/doorsix-v')
+      - name: Summarize build-only run
+        if: steps.release_gate.outputs.should_publish != 'true'
+        run: |
+          {
+            echo "### DoorSix Android build"
+            echo
+            echo "- Version: ${{ steps.version.outputs.pubspec_version }}"
+            echo "- Release publish: skipped"
+            echo "- Reason: PR/build verification, missing release notes, or existing release tag"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    if: needs.build-apk.outputs.should_publish == 'true'
     needs: build-apk
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: doorsix-release-apk
+          name: doorsix-android-${{ needs.build-apk.outputs.pubspec_version }}
           path: dist
 
+      - name: Validate release notes
+        run: test -f "${{ needs.build-apk.outputs.release_notes }}"
+
+      - name: Create or validate release tag
+        run: |
+          tag="${{ needs.build-apk.outputs.expected_tag }}"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            tag_sha="$(git rev-list -n 1 "$tag")"
+            if [ "$tag_sha" != "$GITHUB_SHA" ]; then
+              echo "Tag ${tag} points to ${tag_sha}, not ${GITHUB_SHA}" >&2
+              exit 1
+            fi
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "$tag" "$GITHUB_SHA"
+            git push origin "$tag"
+          fi
+
+      - name: Configure SSH
+        run: |
+          if [ -z "${{ secrets.RELEASE_USER }}" ] || [ -z "${{ secrets.RELEASE_SSH_KEY }}" ]; then
+            echo "RELEASE_USER and RELEASE_SSH_KEY secrets are required to publish." >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.RELEASE_SSH_KEY }}" > ~/.ssh/doorsix_release_key
+          chmod 600 ~/.ssh/doorsix_release_key
+          ssh-keyscan -H "${{ env.RELEASE_HOST }}" >> ~/.ssh/known_hosts
+          {
+            echo "Host doorsix-release"
+            echo "  HostName ${{ env.RELEASE_HOST }}"
+            echo "  User ${{ secrets.RELEASE_USER }}"
+            echo "  IdentityFile ~/.ssh/doorsix_release_key"
+            echo "  IdentitiesOnly yes"
+          } >> ~/.ssh/config
+
+      - name: Publish APK and manifest
+        env:
+          RELEASE_HOST: doorsix-release
+          RELEASE_USER: ${{ secrets.RELEASE_USER }}
+          RELEASE_REMOTE_DIR: ${{ env.RELEASE_REMOTE_DIR }}
+          RELEASE_PUBLIC_BASE_URL: ${{ env.RELEASE_PUBLIC_BASE_URL }}
+          APK_PATH: dist/door_six-${{ needs.build-apk.outputs.pubspec_version }}-${{ env.RELEASE_CHANNEL }}.apk
+          VERSION_NAME: ${{ needs.build-apk.outputs.version_name }}
+          VERSION_CODE: ${{ needs.build-apk.outputs.version_code }}
+          RELEASE_CHANNEL: ${{ env.RELEASE_CHANNEL }}
+          RELEASE_ENVIRONMENT: ${{ env.RELEASE_ENVIRONMENT }}
+          FORCE_UPDATE: ${{ inputs.forceUpdate || 'false' }}
+          MIN_SUPPORTED_VERSION_CODE: ${{ inputs.minSupportedVersionCode || '1' }}
+          ROLLOUT_PERCENTAGE: ${{ inputs.rolloutPercentage || '100' }}
+          RELEASE_NOTES_FILE: ${{ needs.build-apk.outputs.release_notes }}
+          GIT_TAG: ${{ needs.build-apk.outputs.expected_tag }}
+        run: ./scripts/publish_android_release.sh
+
       - name: Create GitHub Release
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/doorsix-release.apk
-          generate_release_notes: true
+          tag_name: ${{ needs.build-apk.outputs.expected_tag }}
+          files: dist/door_six-${{ needs.build-apk.outputs.pubspec_version }}-${{ env.RELEASE_CHANNEL }}.apk
+          body_path: ${{ needs.build-apk.outputs.release_notes }}

@@ -17,6 +17,7 @@ if [[ -z "${PUBLIC_BASE_URL:-}" ]]; then
   fi
 fi
 ROOM_TTL_SECONDS="${ROOM_TTL_SECONDS:-7200}"
+APP_RELEASE_ROOT="${APP_RELEASE_ROOT:-/opt/doorsix/releases}"
 PASSWORD_FILE="${DEPLOY_PASSWORD_FILE:-$REPO_DIR/.local/secrets/doorsix-root-password.txt}"
 REMOTE_ARCHIVE="/tmp/doorsix-server.$$.tar.gz"
 REMOTE_DEPLOY_SCRIPT="/tmp/doorsix-deploy.$$.sh"
@@ -161,7 +162,7 @@ node_bin() {
 }
 
 write_env_file() {
-  mkdir -p /etc/doorsix /var/log/doorsix/matches
+  mkdir -p /etc/doorsix /var/log/doorsix/matches "$APP_RELEASE_ROOT/android" "$APP_RELEASE_ROOT/manifests" "$APP_RELEASE_ROOT/.tmp"
   cat > /etc/doorsix/server.env <<ENV
 NODE_ENV=production
 HOST=0.0.0.0
@@ -170,6 +171,12 @@ PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
 REDIS_URL=redis://127.0.0.1:6379
 ROOM_TTL_SECONDS=${ROOM_TTL_SECONDS}
 MATCH_LOG_DIR=/var/log/doorsix/matches
+APP_UPDATE_MANIFEST_PATH=${APP_RELEASE_ROOT}/manifests/latest-android-stable.json
+APP_UPDATE_MANIFEST_URL=
+APP_RELEASE_ANDROID_DIR=${APP_RELEASE_ROOT}/android
+APP_UPDATE_ENVIRONMENT=prod
+APP_UPDATE_DEFAULT_CHANNEL=stable
+APP_UPDATE_DOWNLOAD_BASE_URL=${PUBLIC_BASE_URL}/downloads/android
 ENV
   chmod 0644 /etc/doorsix/server.env
 }
@@ -251,7 +258,7 @@ install_dependencies_if_needed
 write_env_file
 write_service
 
-chown -R doorsix:doorsix "$DEPLOY_DIR" /var/log/doorsix
+chown -R doorsix:doorsix "$DEPLOY_DIR" /var/log/doorsix "$APP_RELEASE_ROOT"
 
 systemctl daemon-reload
 systemctl enable --now doorsix-server
@@ -283,8 +290,8 @@ echo "Uploading deploy runner to $SSH_TARGET:$REMOTE_DEPLOY_SCRIPT"
 copy_to_remote "$REMOTE_SCRIPT_FILE" "$REMOTE_DEPLOY_SCRIPT"
 
 echo "Installing runtime and starting service"
-remote_env=$(printf 'DEPLOY_DIR=%q REMOTE_ARCHIVE=%q DEPLOY_PORT=%q PUBLIC_BASE_URL=%q ROOM_TTL_SECONDS=%q' \
-  "$DEPLOY_DIR" "$REMOTE_ARCHIVE" "$DEPLOY_PORT" "$PUBLIC_BASE_URL" "$ROOM_TTL_SECONDS")
+remote_env=$(printf 'DEPLOY_DIR=%q REMOTE_ARCHIVE=%q DEPLOY_PORT=%q PUBLIC_BASE_URL=%q ROOM_TTL_SECONDS=%q APP_RELEASE_ROOT=%q' \
+  "$DEPLOY_DIR" "$REMOTE_ARCHIVE" "$DEPLOY_PORT" "$PUBLIC_BASE_URL" "$ROOM_TTL_SECONDS" "$APP_RELEASE_ROOT")
 remote_script_path=$(printf '%q' "$REMOTE_DEPLOY_SCRIPT")
 remote_ssh "$remote_env bash $remote_script_path; status=\$?; rm -f $remote_script_path; exit \$status"
 

@@ -35,4 +35,6 @@ flutter build apk --release
 
 - [初始化设计](docs/init-design.md)
 - [App UI 原型](docs/app-ui-prototype.md)
+- [自动发布与安卓版本升级需求](docs/version-release-upgrade-requirements.md)
+- [自动发布与安卓版本升级技术设计](docs/version-release-upgrade-technical-design.md)
 - [用户场景测试方案](docs/test-plan.md)

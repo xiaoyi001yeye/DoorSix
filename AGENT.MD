@@ -197,6 +197,45 @@ flutter analyze
 flutter test
 ```
 
+## 安卓发布说明
+
+自动发布与安卓版本升级设计记录在：
+
+- `docs/version-release-upgrade-requirements.md`
+- `docs/version-release-upgrade-technical-design.md`
+
+每个安卓发布版本必须维护一份面向用户的固定发布说明文件，路径约定为：
+
+```text
+docs/release-notes/android/<versionName>+<versionCode>.md
+```
+
+例如：
+
+```text
+docs/release-notes/android/0.2.0+2.md
+```
+
+发布前必须提交对应版本的 release notes。CI 发布时读取该文件生成发布清单中的 `releaseNotes`，并用于 GitHub Release 或等价发布记录。不要只依赖 commit 自动摘要或临时 workflow 输入生成用户可见更新内容；如果缺少对应版本的 release notes，正式发布应失败并提示补充。
+
+安卓发布能力必须支持“提交代码并 push 后可以发布一个新版本”。普通 push 如果 `pubspec.yaml` 中的 `version` 没有递增，CI 只运行分析、测试和构建验证，不发布新 APK，并在 CI summary 中说明“版本未递增，跳过发布”。当本次提交已经递增 `pubspec.yaml` 中的 `version`，并提交了对应 `docs/release-notes/android/<versionName>+<versionCode>.md` 时，CI 应自动创建或复用 `android-v<versionName>+<versionCode>` tag，构建 APK，上传到 `39.104.67.175`，更新 `latest-android-stable.json`，让旧版安卓端在启动或回到前台检查版本接口时收到新版本提示。不要要求人工预先创建 tag；tag 不存在时由 CI 自动创建。安卓发布只由分支 push 或 `workflow_dispatch` 手动触发执行；`android-v*` tag 只作为发布追溯记录，tag push 本身不得触发发布 workflow，避免同一版本重复发布。若 release notes 缺失、tag 指向其他 commit、构建失败、上传失败或下载地址校验失败，发布必须失败并给出明确原因，不能静默跳过或污染线上 latest 清单。
+
+GitHub Release 是非阻塞发布记录。只要 APK 上传成功、下载地址校验成功、`latest-android-stable.json` 更新成功，就认为安卓发布成功。GitHub Release 创建或更新失败时，CI 应在 summary 中标记 warning 并提示后续补建，不得回滚已经成功的安卓发布。
+
+项目必须提供一个本地发布脚本，用于在用户明确想发布新版本时由人或 AI 工具执行：
+
+```bash
+scripts/release_android_version.sh <versionName+versionCode> "<release note>"
+```
+
+示例：
+
+```bash
+scripts/release_android_version.sh 0.2.0+2 "优化联机稳定性；修复重连后状态不同步"
+```
+
+该脚本负责把 `pubspec.yaml` 更新到目标版本，创建或更新 `docs/release-notes/android/<versionName>+<versionCode>.md`，运行必要的本地检查，提交并 push 当前分支。脚本允许把当前工作区已有未提交改动、版本号更新和 release notes 一起提交并发布；执行前必须打印 `git status --short` 供操作者确认，提交信息使用 `release: android <versionName>+<versionCode>`。push 后由 CI 完成自动 tag、APK 构建、上传服务器、更新 latest 清单和 GitHub Release。脚本必须校验目标 `versionCode` 大于当前版本，必须拒绝缺少发布说明的发布，必须在失败时给出明确原因。AI 工具需要发布新版本时，应优先执行这个脚本，不手工改版本号、不手工建 tag、不手工上传 APK。
+
 ## 自动提交与推送
 
 每次修改代码后，在完成必要检查或说明无法检查的原因后，必须使用项目脚本自动提交并推送当前分支：

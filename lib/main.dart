@@ -11,6 +11,7 @@ import 'pages/scoreboard_page.dart';
 import 'utils/app_theme.dart';
 import 'utils/card_display_settings.dart';
 import 'utils/game_runtime_config.dart';
+import 'widgets/app_update_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -77,11 +78,13 @@ class DoorSixApp extends StatelessWidget {
         builder: (context, child) {
           final settings = CardDisplaySettingsScope.of(context);
           final mediaQuery = MediaQuery.of(context);
-          return MediaQuery(
-            data: mediaQuery.copyWith(
-              textScaler: TextScaler.linear(settings.fontScale),
+          return AppUpdateGate(
+            child: MediaQuery(
+              data: mediaQuery.copyWith(
+                textScaler: TextScaler.linear(settings.fontScale),
+              ),
+              child: child ?? const SizedBox.shrink(),
             ),
-            child: child ?? const SizedBox.shrink(),
           );
         },
       ),

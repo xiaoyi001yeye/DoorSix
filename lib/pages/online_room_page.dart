@@ -15,6 +15,7 @@ import '../services/rule_engine.dart';
 import '../services/server_log_store.dart';
 import '../utils/app_theme.dart';
 import '../widgets/action_bar.dart';
+import '../widgets/app_update_gate.dart';
 import '../widgets/card_display_settings_sheet.dart';
 import '../widgets/game_table_layout.dart';
 import '../widgets/hand_area.dart';
@@ -438,6 +439,13 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
       _selectedCardIds.clear();
       _applySnapshot(snapshot);
     } on DoorSixBackendException catch (error) {
+      if (error.code == 'APP_VERSION_UNSUPPORTED') {
+        unawaited(AppUpdateScope.of(context).checkNow(
+          manual: true,
+          ignoreDismissal: true,
+          source: 'unsupported_version',
+        ));
+      }
       _showMessage(error.message);
       if (mounted) {
         showServerLogSheet(context);

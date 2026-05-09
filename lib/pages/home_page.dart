@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../models/rule_set.dart';
 import '../services/online_table_service.dart';
 import '../utils/app_theme.dart';
+import '../widgets/app_update_gate.dart';
 import '../widgets/card_display_settings_sheet.dart';
 import '../widgets/server_log_sheet.dart';
 
@@ -70,6 +71,15 @@ class _HomePageState extends State<HomePage> {
                     tooltip: '服务器日志',
                     onPressed: () => showServerLogSheet(context),
                     icon: const Icon(Icons.terminal_rounded),
+                  ),
+                  IconButton(
+                    tooltip: '检查更新',
+                    onPressed: () => AppUpdateScope.of(context).checkNow(
+                      manual: true,
+                      ignoreDismissal: true,
+                      source: 'manual',
+                    ),
+                    icon: const Icon(Icons.system_update_alt_rounded),
                   ),
                   IconButton(
                     tooltip: '设置',

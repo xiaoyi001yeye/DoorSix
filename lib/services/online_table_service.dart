@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/online_table.dart';
+import 'app_build_info.dart';
 import 'server_log_store.dart';
 
 enum ServerHealthStatus {
@@ -38,9 +39,12 @@ class DoorSixBackendClient {
       'DOORSIX_API_BASE_URL',
       defaultValue: 'http://39.104.67.175',
     ),
-  }) : _baseUri = Uri.parse(baseUrl);
+    AppBuildInfo buildInfo = const AppBuildInfo(),
+  })  : _baseUri = Uri.parse(baseUrl),
+        _buildInfo = buildInfo;
 
   final Uri _baseUri;
+  final AppBuildInfo _buildInfo;
   final HttpClient _http = HttpClient()
     ..connectionTimeout = const Duration(seconds: 8);
   final ServerLogStore _logs = ServerLogStore.instance;
@@ -194,6 +198,7 @@ class DoorSixBackendClient {
       final request = await _http.openUrl(method, uri);
       request.headers.contentType = ContentType.json;
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      _setAppHeaders(request.headers);
       if (token != null) {
         request.headers.set('X-Player-Token', token);
       }
@@ -255,6 +260,13 @@ class DoorSixBackendClient {
     final params = Map<String, String>.from(uri.queryParameters)
       ..['playerToken'] = session.playerToken;
     return uri.replace(queryParameters: params);
+  }
+
+  void _setAppHeaders(HttpHeaders headers) {
+    headers.set('X-App-Platform', _buildInfo.platform);
+    headers.set('X-App-Version-Code', _buildInfo.versionCode.toString());
+    headers.set('X-App-Version-Name', _buildInfo.versionName);
+    headers.set('X-App-Channel', _buildInfo.channel);
   }
 
   bool _isBusyStatus(int statusCode) {

@@ -8,6 +8,8 @@ const express = require('express');
 const { createClient } = require('redis');
 const { WebSocketServer } = require('ws');
 
+const appUpdates = require('./app-update-service');
+
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
@@ -16,6 +18,8 @@ const ROOM_TTL_SECONDS = Number(process.env.ROOM_TTL_SECONDS || 7200);
 const MATCH_LOG_DIR = process.env.MATCH_LOG_DIR || path.join(process.cwd(), 'logs', 'matches');
 const GAME_SETTINGS = require('../config/game_settings.json');
 const WEB_PLAY_DIR = path.join(__dirname, '..', 'public', 'play');
+const APP_RELEASE_ANDROID_DIR = process.env.APP_RELEASE_ANDROID_DIR ||
+  '/opt/doorsix/releases/android';
 
 const RULE_SET_ID = 'zha_liujia_tianjin_basic_v1';
 const MAX_PLAYERS = 6;
@@ -903,6 +907,14 @@ app.use('/play', express.static(WEB_PLAY_DIR, { index: 'index.html' }));
 app.get(/^\/play(?:\/.*)?$/, (_req, res) => {
   res.sendFile(path.join(WEB_PLAY_DIR, 'index.html'));
 });
+app.use('/downloads/android', express.static(APP_RELEASE_ANDROID_DIR, {
+  fallthrough: false,
+  immutable: true,
+  maxAge: '7d',
+  setHeaders(res) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  },
+}));
 
 app.get('/health', async (_req, res) => {
   res.json({
@@ -913,6 +925,127 @@ app.get('/health', async (_req, res) => {
     serverTime: now(),
   });
 });
+
+app.get('/api/v1/app-updates/latest', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  const platform = String(req.query.platform || 'android');
+  const channel = String(req.query.channel || appUpdates.defaultChannel());
+  const versionCode = Number(req.query.versionCode);
+  const versionName = String(req.query.versionName || '');
+  const deviceId = req.query.deviceId ? String(req.query.deviceId) : '';
+
+  if (platform !== 'android') {
+    return fail(req, res, 400, 'INVALID_REQUEST', 'platform 必须是 android');
+  }
+  if (!Number.isInteger(versionCode) || versionCode <= 0) {
+    return fail(req, res, 400, 'INVALID_REQUEST', 'versionCode 必须是正整数');
+  }
+
+  try {
+    const release = await appUpdates.loadLatestRelease({ platform, channel });
+    const result = appUpdates.decideUpdate({
+      release,
+      clientVersionCode: versionCode,
+      deviceId,
+      requestSeed: appUpdates.requestSeedFor(req),
+    });
+    console.log('[app-update] latest', JSON.stringify({
+      platform,
+      channel,
+      versionCode,
+      versionName,
+      hasUpdate: result.hasUpdate,
+      updateType: result.updateType || 'none',
+    }));
+    return res.json({
+      ...result,
+      serverTime: new Date().toISOString(),
+    });
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      console.warn(`[app-update] manifest missing: ${appUpdates.defaultManifestPath()}`);
+      return res.json({
+        hasUpdate: false,
+        serverTime: new Date().toISOString(),
+      });
+    }
+    if (error instanceof SyntaxError || String(error.code || '').startsWith('INVALID')) {
+      console.error('[app-update] invalid manifest', error.message);
+      return fail(req, res, 500, 'APP_UPDATE_MANIFEST_INVALID', '版本清单不可用');
+    }
+    if (error.code === 'UNSUPPORTED_CHANNEL') {
+      return fail(req, res, 400, 'INVALID_REQUEST', 'channel 目前只支持 stable');
+    }
+    console.error('[app-update] latest failed', error);
+    return fail(req, res, 500, 'APP_UPDATE_UNAVAILABLE', '版本检查暂时不可用');
+  }
+});
+
+app.get('/api/v1/app-updates/releases/:platform/:versionCode', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  const platform = req.params.platform;
+  const versionCode = Number(req.params.versionCode);
+  if (platform !== 'android' || !Number.isInteger(versionCode) || versionCode <= 0) {
+    return fail(req, res, 400, 'INVALID_REQUEST', '版本参数不合法');
+  }
+  try {
+    const release = await appUpdates.loadReleaseByVersionCode({ platform, versionCode });
+    if (!release) {
+      return fail(req, res, 404, 'APP_RELEASE_NOT_FOUND', '版本不存在');
+    }
+    return ok(req, res, {
+      ...release,
+      available: release.status === 'active',
+    });
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return fail(req, res, 404, 'APP_RELEASE_NOT_FOUND', '版本不存在');
+    }
+    if (error instanceof SyntaxError || String(error.code || '').startsWith('INVALID')) {
+      console.error('[app-update] invalid manifest', error.message);
+      return fail(req, res, 500, 'APP_UPDATE_MANIFEST_INVALID', '版本清单不可用');
+    }
+    console.error('[app-update] release detail failed', error);
+    return fail(req, res, 500, 'APP_UPDATE_UNAVAILABLE', '版本检查暂时不可用');
+  }
+});
+
+async function enforceSupportedAppVersion(req, res, next) {
+  const rawVersionCode = req.headers['x-app-version-code'];
+  if (!rawVersionCode) {
+    return next();
+  }
+  const versionCode = Number(rawVersionCode);
+  if (!Number.isInteger(versionCode) || versionCode <= 0) {
+    return next();
+  }
+  try {
+    const release = await appUpdates.loadLatestRelease({
+      platform: 'android',
+      channel: String(req.headers['x-app-channel'] || appUpdates.defaultChannel()),
+    });
+    if (release.status === 'active' && versionCode < release.minSupportedVersionCode) {
+      return res.status(426).json({
+        success: false,
+        requestId: requestId(req),
+        data: null,
+        error: {
+          code: 'APP_VERSION_UNSUPPORTED',
+          message: '当前版本过低，请升级后继续使用。',
+          minSupportedVersionCode: release.minSupportedVersionCode,
+        },
+      });
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn('[app-update] skip compatibility check:', error.message);
+    }
+  }
+  return next();
+}
+
+app.use('/api/v1/rooms', enforceSupportedAppVersion);
+app.use('/api/v1/players', enforceSupportedAppVersion);
 
 app.post('/api/v1/rooms', async (req, res) => {
   const nickname = normalizeNickname(req.body?.nickname);

@@ -114,6 +114,7 @@ class DoorSixBackendClient {
 
   Future<OnlineSession> createRoom({
     required String nickname,
+    required String avatarId,
     int seatIndex = 0,
   }) async {
     final data = await _request(
@@ -121,6 +122,7 @@ class DoorSixBackendClient {
       '/api/v1/rooms',
       body: {
         'nickname': nickname,
+        'avatarId': avatarId,
         'seatIndex': seatIndex,
       },
     );
@@ -130,9 +132,13 @@ class DoorSixBackendClient {
   Future<OnlineSession> joinRoom({
     required String roomCode,
     required String nickname,
+    required String avatarId,
     int? seatIndex,
   }) async {
-    final body = <String, Object?>{'nickname': nickname};
+    final body = <String, Object?>{
+      'nickname': nickname,
+      'avatarId': avatarId,
+    };
     if (seatIndex != null) {
       body['seatIndex'] = seatIndex;
     }

@@ -65,6 +65,7 @@ class OnlineSeat {
     required this.ready,
     required this.connected,
     required this.cardCount,
+    this.avatarId = 'sun',
     this.finishRank,
   });
 
@@ -76,6 +77,7 @@ class OnlineSeat {
   final bool ready;
   final bool connected;
   final int cardCount;
+  final String avatarId;
   final int? finishRank;
 
   factory OnlineSeat.fromJson(Map<String, dynamic> json) {
@@ -88,6 +90,7 @@ class OnlineSeat {
       ready: json['ready'] as bool? ?? false,
       connected: json['connected'] as bool? ?? false,
       cardCount: json['cardCount'] as int? ?? 0,
+      avatarId: json['avatarId'] as String? ?? 'sun',
       finishRank: json['finishRank'] as int?,
     );
   }
@@ -103,6 +106,7 @@ class OnlineSeat {
       seatIndex: seatIndex,
       cardCount: cardCount,
       isUser: playerId == selfPlayerId,
+      avatarId: avatarId,
       status: status,
       finishRank: finishRank,
     );

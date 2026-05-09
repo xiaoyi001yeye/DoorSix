@@ -19,6 +19,7 @@ class GamePlayer {
     required this.seatIndex,
     required this.cardCount,
     required this.isUser,
+    this.avatarId = 'sun',
     this.status = PlayerStatus.waiting,
     this.finishRank,
   });
@@ -29,11 +30,13 @@ class GamePlayer {
   final int seatIndex;
   final int cardCount;
   final bool isUser;
+  final String avatarId;
   final PlayerStatus status;
   final int? finishRank;
 
   GamePlayer copyWith({
     int? cardCount,
+    String? avatarId,
     PlayerStatus? status,
     int? finishRank,
   }) {
@@ -44,6 +47,7 @@ class GamePlayer {
       seatIndex: seatIndex,
       cardCount: cardCount ?? this.cardCount,
       isUser: isUser,
+      avatarId: avatarId ?? this.avatarId,
       status: status ?? this.status,
       finishRank: finishRank ?? this.finishRank,
     );

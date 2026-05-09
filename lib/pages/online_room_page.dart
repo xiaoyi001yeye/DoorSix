@@ -14,11 +14,13 @@ import '../services/online_table_service.dart';
 import '../services/rule_engine.dart';
 import '../services/server_log_store.dart';
 import '../utils/app_theme.dart';
+import '../utils/player_profile_settings.dart';
 import '../widgets/action_bar.dart';
 import '../widgets/app_update_gate.dart';
 import '../widgets/card_display_settings_sheet.dart';
 import '../widgets/game_table_layout.dart';
 import '../widgets/hand_area.dart';
+import '../widgets/player_avatar_badge.dart';
 import '../widgets/server_log_sheet.dart';
 import '../widgets/table_center.dart';
 
@@ -134,6 +136,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
   }
 
   Widget _buildEntry() {
+    final profile = PlayerProfileSettingsScope.of(context);
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -163,6 +166,11 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
             labelText: '昵称',
             prefixIcon: Icon(Icons.person_outline_rounded),
           ),
+        ),
+        const SizedBox(height: 16),
+        _EntryAvatarPicker(
+          selectedAvatarId: profile.avatarPresetId,
+          onSelected: profile.setAvatarPresetId,
         ),
         if (_mode == OnlineEntryMode.join) ...[
           const SizedBox(height: 14),
@@ -347,6 +355,10 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
       padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
       players: players,
       currentSeat: snapshot.status == 'playing' ? currentSeat : null,
+      playedBySeat:
+          snapshot.tableCombo == null ? null : snapshot.lastPlayedSeatIndex,
+      selfSeat:
+          _selfSeat(snapshot)?.seatIndex ?? _session?.self.seatIndex ?? 0,
       selfTeam: _selfTeam(snapshot),
       finishOrder: snapshot.finishOrder,
       countdownSecondsForSeat: (seat) {
@@ -427,9 +439,14 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('online_nickname', nickname);
+      final avatarId = PlayerProfileSettingsScope.of(context).avatarPresetId;
       final session = _mode == OnlineEntryMode.create
-          ? await _client.createRoom(nickname: nickname)
-          : await _client.joinRoom(roomCode: roomCode, nickname: nickname);
+          ? await _client.createRoom(nickname: nickname, avatarId: avatarId)
+          : await _client.joinRoom(
+              roomCode: roomCode,
+              nickname: nickname,
+              avatarId: avatarId,
+            );
       _session = session;
       _logs
         ..clear()
@@ -788,6 +805,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
         seatIndex: index,
         cardCount: 0,
         isUser: false,
+        avatarId: 'stone',
       );
     });
   }
@@ -978,6 +996,53 @@ class _ServerBadge extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EntryAvatarPicker extends StatelessWidget {
+  const _EntryAvatarPicker({
+    required this.selectedAvatarId,
+    required this.onSelected,
+  });
+
+  final String selectedAvatarId;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppTheme.panel,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0x334CC9F0)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.face_retouching_natural_rounded, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  '本局头像',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            PlayerAvatarSelector(
+              selectedAvatarId: selectedAvatarId,
+              onSelected: onSelected,
             ),
           ],
         ),
@@ -1225,6 +1290,14 @@ class _SeatGrid extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
+                    if (seat != null) ...[
+                      PlayerAvatarBadge(
+                        avatarId: seat.avatarId,
+                        size: 28,
+                        showRing: isSelf,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     Expanded(
                       child: Text(
                         seat == null

@@ -28,6 +28,7 @@ const TURN_TIMEOUT_MS = TURN_DURATION_SECONDS * 1000;
 const AI_MIN_DELAY_MS = 3000;
 const AI_MAX_DELAY_MS = 8000;
 const TEAM_BY_SEAT = ['B', 'A', 'B', 'A', 'B', 'A'];
+const AVATAR_IDS = ['sun', 'leaf', 'spark', 'wave', 'stone', 'crown'];
 const COMBO_TYPES = ['invalid', 'single', 'pair', 'triple', 'quad'];
 const RANK_STRENGTH = {
   '4': 1,
@@ -92,6 +93,11 @@ function validateSeatIndex(seatIndex) {
 function normalizeNickname(value) {
   const nickname = String(value || '').trim();
   return nickname.slice(0, 24);
+}
+
+function normalizeAvatarId(value) {
+  const avatarId = String(value || '').trim();
+  return AVATAR_IDS.includes(avatarId) ? avatarId : AVATAR_IDS[0];
 }
 
 function wsUrlFor(roomId) {
@@ -350,6 +356,7 @@ function seatView(seat) {
     seatIndex: seat.seatIndex,
     playerId: seat.playerId,
     nickname: seat.nickname,
+    avatarId: normalizeAvatarId(seat.avatarId),
     team: seat.team,
     isAi: seat.isAi,
     ready: seat.ready,
@@ -424,7 +431,7 @@ async function authenticateRoomRequest(req, res) {
   return { state, auth, token };
 }
 
-function createInitialState(nickname, requestedSeatIndex) {
+function createInitialState(nickname, requestedSeatIndex, avatarId = AVATAR_IDS[0]) {
   const createdAt = now();
   const roomId = id('r');
   const playerId = id('p');
@@ -436,6 +443,7 @@ function createInitialState(nickname, requestedSeatIndex) {
     seatIndex,
     playerId,
     nickname,
+    avatarId: normalizeAvatarId(avatarId),
     team: teamForSeat(seatIndex),
     isAi: false,
     ready: false,
@@ -515,6 +523,7 @@ function recordAction(state, seat, actionType, options = {}) {
     seatIndex: seat.seatIndex,
     playerId: seat.playerId,
     nickname: seat.nickname,
+    avatarId: normalizeAvatarId(seat.avatarId),
     team: seat.team,
     isAi: seat.isAi,
     cards: (options.cards || []).map(cardHistoryView),
@@ -677,6 +686,7 @@ function ensureAiSeats(state) {
         seatIndex,
         playerId,
         nickname: `AI ${seatIndex + 1}`,
+        avatarId: AVATAR_IDS[seatIndex % AVATAR_IDS.length],
         team: teamForSeat(seatIndex),
         isAi: true,
         ready: true,
@@ -747,6 +757,7 @@ async function playCards(state, seat, cards, source = 'player') {
       seatIndex: seat.seatIndex,
       playerId: seat.playerId,
       nickname: seat.nickname,
+      avatarId: normalizeAvatarId(seat.avatarId),
       team: seat.team,
       rank: finishRank,
     });
@@ -1067,6 +1078,7 @@ app.use('/api/v1/players', enforceSupportedAppVersion);
 
 app.post('/api/v1/rooms', async (req, res) => {
   const nickname = normalizeNickname(req.body?.nickname);
+  const avatarId = normalizeAvatarId(req.body?.avatarId);
   if (!nickname) return fail(req, res, 400, 'INVALID_REQUEST', '昵称不能为空');
   const seatIndex = req.body?.seatIndex;
   if (seatIndex != null && !validateSeatIndex(seatIndex)) {
@@ -1075,7 +1087,7 @@ app.post('/api/v1/rooms', async (req, res) => {
 
   let state;
   do {
-    state = createInitialState(nickname, seatIndex);
+    state = createInitialState(nickname, seatIndex, avatarId);
   } while (await store.getRoomIdByCode(state.room.roomCode));
 
   await store.setRoom(state);
@@ -1101,6 +1113,7 @@ app.get('/api/v1/rooms/by-code/:roomCode', async (req, res) => {
 
 app.post('/api/v1/rooms/by-code/:roomCode/join', async (req, res) => {
   const nickname = normalizeNickname(req.body?.nickname);
+  const avatarId = normalizeAvatarId(req.body?.avatarId);
   if (!nickname) return fail(req, res, 400, 'INVALID_REQUEST', '昵称不能为空');
   const roomId = await store.getRoomIdByCode(req.params.roomCode);
   const state = roomId ? await store.getRoom(roomId) : null;
@@ -1123,6 +1136,7 @@ app.post('/api/v1/rooms/by-code/:roomCode/join', async (req, res) => {
     seatIndex,
     playerId,
     nickname,
+    avatarId,
     team: teamForSeat(seatIndex),
     isAi: false,
     ready: false,

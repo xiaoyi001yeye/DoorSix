@@ -19,6 +19,8 @@ class GameTableLayout extends StatelessWidget {
     required this.selfTeam,
     required this.centerBuilder,
     this.finishOrder = const [],
+    this.selfSeat = 0,
+    this.playedBySeat,
     this.countdownSecondsForSeat,
     this.padding = const EdgeInsets.fromLTRB(18, 8, 18, 14),
     super.key,
@@ -29,6 +31,8 @@ class GameTableLayout extends StatelessWidget {
   final TeamSide selfTeam;
   final TableCenterBuilder centerBuilder;
   final List<FinishedSeat> finishOrder;
+  final int selfSeat;
+  final int? playedBySeat;
   final int? Function(int seatIndex)? countdownSecondsForSeat;
   final EdgeInsets padding;
 
@@ -60,14 +64,19 @@ class GameTableLayout extends StatelessWidget {
                 alignment: Alignment.center,
                 child: centerBuilder(context, centerWidth),
               ),
-              for (var seat = 0; seat < players.length; seat += 1)
+              for (var index = 0; index < players.length; index += 1)
                 Align(
-                  alignment: seatAlignment(seat),
+                  alignment: seatAlignment(
+                    displaySeatIndex(players[index].seatIndex, selfSeat),
+                  ),
                   child: PlayerSeat(
-                    player: players[seat],
-                    isCurrent: currentSeat == seat,
-                    isAlly: players[seat].team == selfTeam,
-                    countdownSeconds: countdownSecondsForSeat?.call(seat),
+                    player: players[index],
+                    isCurrent: currentSeat == players[index].seatIndex,
+                    isAlly: players[index].team == selfTeam,
+                    showPlayPointer: playedBySeat == players[index].seatIndex,
+                    countdownSeconds: countdownSecondsForSeat?.call(
+                      players[index].seatIndex,
+                    ),
                   ),
                 ),
               Align(
@@ -80,6 +89,10 @@ class GameTableLayout extends StatelessWidget {
       ),
     );
   }
+}
+
+int displaySeatIndex(int seatIndex, int selfSeat) {
+  return (seatIndex - selfSeat + 6) % 6;
 }
 
 Alignment seatAlignment(int seat) {

@@ -11,12 +11,14 @@ import 'pages/scoreboard_page.dart';
 import 'utils/app_theme.dart';
 import 'utils/card_display_settings.dart';
 import 'utils/game_runtime_config.dart';
+import 'utils/player_profile_settings.dart';
 import 'widgets/app_update_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await GameRuntimeConfig.load();
   await CardDisplaySettings.instance.load();
+  await PlayerProfileSettings.instance.load();
   await SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -73,24 +75,27 @@ class DoorSixApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return CardDisplaySettingsScope(
       settings: CardDisplaySettings.instance,
-      child: MaterialApp.router(
-        title: 'DoorSix',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.theme,
-        routerConfig: _router,
-        builder: (context, child) {
-          final settings = CardDisplaySettingsScope.of(context);
-          final mediaQuery = MediaQuery.of(context);
-          return AppUpdateGate(
-            navigatorKey: _rootNavigatorKey,
-            child: MediaQuery(
-              data: mediaQuery.copyWith(
-                textScaler: TextScaler.linear(settings.fontScale),
+      child: PlayerProfileSettingsScope(
+        settings: PlayerProfileSettings.instance,
+        child: MaterialApp.router(
+          title: 'DoorSix',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.theme,
+          routerConfig: _router,
+          builder: (context, child) {
+            final settings = CardDisplaySettingsScope.of(context);
+            final mediaQuery = MediaQuery.of(context);
+            return AppUpdateGate(
+              navigatorKey: _rootNavigatorKey,
+              child: MediaQuery(
+                data: mediaQuery.copyWith(
+                  textScaler: TextScaler.linear(settings.fontScale),
+                ),
+                child: child ?? const SizedBox.shrink(),
               ),
-              child: child ?? const SizedBox.shrink(),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

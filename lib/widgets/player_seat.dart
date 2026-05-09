@@ -3,12 +3,14 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../models/player_model.dart';
 import '../utils/app_theme.dart';
+import 'player_avatar_badge.dart';
 
 class PlayerSeat extends StatelessWidget {
   const PlayerSeat({
     required this.player,
     required this.isCurrent,
     required this.isAlly,
+    this.showPlayPointer = false,
     this.countdownSeconds,
     super.key,
   });
@@ -16,13 +18,14 @@ class PlayerSeat extends StatelessWidget {
   final GamePlayer player;
   final bool isCurrent;
   final bool isAlly;
+  final bool showPlayPointer;
   final int? countdownSeconds;
 
   @override
   Widget build(BuildContext context) {
     final borderColor = isAlly ? AppTheme.teamCyan : AppTheme.teamGold;
     final content = Container(
-      width: 92,
+      width: 108,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: AppTheme.panel,
@@ -48,6 +51,12 @@ class PlayerSeat extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              PlayerAvatarBadge(
+                avatarId: player.avatarId,
+                size: 26,
+                showRing: false,
+              ),
+              const SizedBox(width: 6),
               _TeamDot(team: player.team),
               const SizedBox(width: 5),
               Flexible(
@@ -91,16 +100,28 @@ class PlayerSeat extends StatelessWidget {
       ),
     );
 
-    final seat = isCurrent && countdownSeconds != null
-        ? Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _TurnCountdownPill(seconds: countdownSeconds!),
-              const SizedBox(height: 5),
-              content,
-            ],
-          )
-        : content;
+    final seat = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showPlayPointer) ...[
+          const _PlayedByPointer()
+              .animate(onPlay: (controller) => controller.repeat(reverse: true))
+              .fade(
+                begin: 0.72,
+                end: 1,
+                duration: 650.ms,
+                curve: Curves.easeInOut,
+              )
+              .slideY(begin: -0.08, end: 0),
+          const SizedBox(height: 4),
+        ],
+        if (isCurrent && countdownSeconds != null) ...[
+          _TurnCountdownPill(seconds: countdownSeconds!),
+          const SizedBox(height: 5),
+        ],
+        content,
+      ],
+    );
 
     if (!isCurrent) {
       return seat;
@@ -115,6 +136,54 @@ class PlayerSeat extends StatelessWidget {
           curve: Curves.easeInOut,
         );
   }
+}
+
+class _PlayedByPointer extends StatelessWidget {
+  const _PlayedByPointer();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size(28, 22),
+      painter: _PlayedByPointerPainter(),
+    );
+  }
+}
+
+class _PlayedByPointerPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final shadow = Paint()
+      ..color = Colors.black.withValues(alpha: 0.32)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+    final paint = Paint()..color = AppTheme.teamGold;
+    final highlight = Paint()
+      ..color = Colors.white.withValues(alpha: 0.42)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    final path = Path()
+      ..moveTo(size.width / 2, size.height)
+      ..lineTo(size.width * 0.12, size.height * 0.18)
+      ..quadraticBezierTo(
+        size.width / 2,
+        0,
+        size.width * 0.88,
+        size.height * 0.18,
+      )
+      ..close();
+
+    canvas
+      ..save()
+      ..translate(0, 2)
+      ..drawPath(path, shadow)
+      ..restore()
+      ..drawPath(path, paint)
+      ..drawPath(path, highlight);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _TurnCountdownPill extends StatelessWidget {

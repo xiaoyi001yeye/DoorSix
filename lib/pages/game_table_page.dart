@@ -12,6 +12,7 @@ import '../models/rule_set.dart';
 import '../services/rule_engine.dart';
 import '../utils/app_theme.dart';
 import '../utils/game_runtime_config.dart';
+import '../utils/player_profile_settings.dart';
 import '../widgets/action_bar.dart';
 import '../widgets/card_display_settings_sheet.dart';
 import '../widgets/game_table_layout.dart';
@@ -165,10 +166,12 @@ class _GameTablePageState extends State<GameTablePage> {
     required GamePlayer currentPlayer,
     required String? lastPlayedBy,
   }) {
+    final players = _playersForDisplay();
     return GameTableLayout(
-      players: _players,
+      players: players,
       currentSeat: _roundResult == null ? _currentSeat : null,
-      selfTeam: _players[0].team,
+      playedBySeat: _activeCombo == null ? null : _lastPlayedSeat,
+      selfTeam: players[0].team,
       finishOrder: _finishOrder,
       countdownSecondsForSeat: (seat) {
         return seat == _currentSeat ? _turnSecondsRemaining : null;
@@ -184,6 +187,13 @@ class _GameTablePageState extends State<GameTablePage> {
         );
       },
     );
+  }
+
+  List<GamePlayer> _playersForDisplay() {
+    final avatarId = PlayerProfileSettingsScope.of(context).avatarPresetId;
+    return _players.map((player) {
+      return player.isUser ? player.copyWith(avatarId: avatarId) : player;
+    }).toList(growable: false);
   }
 
   Widget _buildHandAndActions() {
@@ -220,6 +230,7 @@ class _GameTablePageState extends State<GameTablePage> {
         seatIndex: 0,
         cardCount: hands[0].length,
         isUser: true,
+        avatarId: 'sun',
       ),
       GamePlayer(
         id: 'a1',
@@ -228,6 +239,7 @@ class _GameTablePageState extends State<GameTablePage> {
         seatIndex: 1,
         cardCount: hands[1].length,
         isUser: false,
+        avatarId: 'leaf',
       ),
       GamePlayer(
         id: 'b1',
@@ -236,6 +248,7 @@ class _GameTablePageState extends State<GameTablePage> {
         seatIndex: 2,
         cardCount: hands[2].length,
         isUser: false,
+        avatarId: 'wave',
       ),
       GamePlayer(
         id: 'a2',
@@ -244,6 +257,7 @@ class _GameTablePageState extends State<GameTablePage> {
         seatIndex: 3,
         cardCount: hands[3].length,
         isUser: false,
+        avatarId: 'crown',
       ),
       GamePlayer(
         id: 'b2',
@@ -252,6 +266,7 @@ class _GameTablePageState extends State<GameTablePage> {
         seatIndex: 4,
         cardCount: hands[4].length,
         isUser: false,
+        avatarId: 'stone',
       ),
       GamePlayer(
         id: 'a3',
@@ -260,6 +275,7 @@ class _GameTablePageState extends State<GameTablePage> {
         seatIndex: 5,
         cardCount: hands[5].length,
         isUser: false,
+        avatarId: 'spark',
       ),
     ];
     _activeCombo = null;

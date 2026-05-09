@@ -84,21 +84,25 @@ if (source.includes(marker)) {
 }
 
 if (gradlePath.endsWith('.kts')) {
+  const importBlock = `import java.io.FileInputStream
+import java.util.Properties
+
+`;
   const propertiesBlock = `// DoorSix release signing
-val doorsixKeystoreProperties = java.util.Properties()
-val doorsixKeystorePropertiesFile = rootProject.file("key.properties")
-if (doorsixKeystorePropertiesFile.exists()) {
-    doorsixKeystoreProperties.load(java.io.FileInputStream(doorsixKeystorePropertiesFile))
+val releaseKeystoreProperties = Properties()
+val releaseKeystorePropertiesFile = rootProject.file("key.properties")
+if (releaseKeystorePropertiesFile.exists()) {
+    releaseKeystoreProperties.load(FileInputStream(releaseKeystorePropertiesFile))
 }
 
 `;
   const signingBlock = `
     signingConfigs {
         create("release") {
-            keyAlias = doorsixKeystoreProperties["keyAlias"] as String
-            keyPassword = doorsixKeystoreProperties["keyPassword"] as String
-            storeFile = doorsixKeystoreProperties["storeFile"]?.let { file(it) }
-            storePassword = doorsixKeystoreProperties["storePassword"] as String
+            keyAlias = releaseKeystoreProperties["keyAlias"] as String
+            keyPassword = releaseKeystoreProperties["keyPassword"] as String
+            storeFile = releaseKeystoreProperties["storeFile"]?.let { file(it) }
+            storePassword = releaseKeystoreProperties["storePassword"] as String
         }
     }
 `;
@@ -108,6 +112,7 @@ if (doorsixKeystorePropertiesFile.exists()) {
   if (!source.includes('\n    buildTypes {')) {
     throw new Error('Could not find buildTypes block in Kotlin Gradle file.');
   }
+  source = importBlock + source;
   source = source.replace('\nandroid {', `\n${propertiesBlock}android {`);
   source = source.replace('\n    buildTypes {', `${signingBlock}\n    buildTypes {`);
   source = source.replace(

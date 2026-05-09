@@ -73,17 +73,15 @@ class _HomePageState extends State<HomePage> {
                     icon: const Icon(Icons.terminal_rounded),
                   ),
                   IconButton(
-                    tooltip: '检查更新',
-                    onPressed: () => AppUpdateScope.of(context).checkNow(
-                      manual: true,
-                      ignoreDismissal: true,
-                      source: 'manual',
-                    ),
-                    icon: const Icon(Icons.system_update_alt_rounded),
-                  ),
-                  IconButton(
                     tooltip: '设置',
-                    onPressed: () => showCardDisplaySettingsSheet(context),
+                    onPressed: () => showCardDisplaySettingsSheet(
+                      context,
+                      onCheckUpdates: () => AppUpdateScope.of(context).checkNow(
+                        manual: true,
+                        ignoreDismissal: true,
+                        source: 'manual',
+                      ),
+                    ),
                     icon: const Icon(Icons.settings_outlined),
                   ),
                 ],

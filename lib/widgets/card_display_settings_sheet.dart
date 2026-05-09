@@ -3,29 +3,36 @@ import 'package:flutter/material.dart';
 import '../utils/app_theme.dart';
 import '../utils/card_display_settings.dart';
 
-void showCardDisplaySettingsSheet(BuildContext context) {
+void showCardDisplaySettingsSheet(
+  BuildContext context, {
+  VoidCallback? onCheckUpdates,
+}) {
   showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    useSafeArea: true,
     builder: (context) {
-      return const _CardDisplaySettingsSheet();
+      return _CardDisplaySettingsSheet(onCheckUpdates: onCheckUpdates);
     },
   );
 }
 
 class _CardDisplaySettingsSheet extends StatelessWidget {
-  const _CardDisplaySettingsSheet();
+  const _CardDisplaySettingsSheet({this.onCheckUpdates});
+
+  final VoidCallback? onCheckUpdates;
 
   @override
   Widget build(BuildContext context) {
     final settings = CardDisplaySettingsScope.of(context);
+    final bottomPadding = MediaQuery.viewPaddingOf(context).bottom + 44;
 
     return AnimatedBuilder(
       animation: settings,
       builder: (context, _) {
         final metrics = settings.metrics;
         return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          padding: EdgeInsets.fromLTRB(20, 8, 20, bottomPadding),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,6 +123,22 @@ class _CardDisplaySettingsSheet extends StatelessWidget {
                   },
                 ),
               ),
+              if (onCheckUpdates != null) ...[
+                const SizedBox(height: 22),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      onCheckUpdates?.call();
+                    },
+                    icon: const Icon(Icons.system_update_alt_rounded),
+                    label: const Text('检查新版本'),
+                  ),
+                ),
+              ],
             ],
           ),
         );

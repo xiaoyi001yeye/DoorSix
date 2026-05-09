@@ -426,6 +426,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
   Future<void> _enterRoom() async {
     final nickname = _nicknameController.text.trim();
     final roomCode = _roomCodeController.text.trim();
+    final avatarId = PlayerProfileSettingsScope.of(context).avatarPresetId;
     if (nickname.isEmpty) {
       _showMessage('先填一个昵称');
       return;
@@ -439,7 +440,6 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('online_nickname', nickname);
-      final avatarId = PlayerProfileSettingsScope.of(context).avatarPresetId;
       final session = _mode == OnlineEntryMode.create
           ? await _client.createRoom(nickname: nickname, avatarId: avatarId)
           : await _client.joinRoom(

@@ -672,7 +672,65 @@ async function runWebSocketTests() {
     assert(error.payload.code === 'NOT_READY', `错误码应为 NOT_READY，实际 ${error.payload.code}`);
   });
 
-  await check('W08', 'WebSocket', 'ready 状态广播', 'WS ready', async () => {
+  await check('W08', 'WebSocket', '玩家可换到空座位', 'WS move_seat', async () => {
+    const joinedSocket = context.startedSockets[1];
+    joinedSocket.send('move_seat', 'joined_move_seat', { seatIndex: 2 });
+    const moved = await joinedSocket.waitFor(
+      (message) => message.type === 'seat_updated' && message.requestId === 'joined_move_seat',
+      '换座广播',
+    );
+    const seats = moved.payload.tableState.seats;
+    assert(seats[1] === null, '原座位应为空');
+    assert(seats[2]?.playerId === context.startedJoined.self.playerId, '目标座位不是换座玩家');
+    assert(seats[2]?.team === 'B', '换到 2 号座位后应属于 B 队');
+    assert(seats[2]?.ready === false, '换座后准备状态应取消');
+    context.startedJoined.self.seatIndex = 2;
+    context.startedJoined.self.team = 'B';
+  });
+
+  await check('W09', 'WebSocket', '房主可移出等待房玩家', 'WS kick_player', async () => {
+    const owner = await request('POST', '/api/v1/rooms', {
+      body: { nickname: testNickname('kick-owner'), seatIndex: 0 },
+    });
+    expectSuccess(owner);
+    const joined = await request('POST', `/api/v1/rooms/by-code/${owner.body.data.room.roomCode}/join`, {
+      body: { nickname: testNickname('kick-join'), seatIndex: 1 },
+    });
+    expectSuccess(joined);
+    const ownerSocket = await openSocket(owner.body.data.room.roomId, owner.body.data.playerToken);
+    const joinedSocket = await openSocket(joined.body.data.room.roomId, joined.body.data.playerToken);
+    await ownerSocket.waitFor((message) => message.type === 'table_snapshot', '踢人房主初始快照');
+    await joinedSocket.waitFor((message) => message.type === 'table_snapshot', '踢人目标初始快照');
+
+    ownerSocket.send('kick_player', 'owner_kick_joined', { seatIndex: 1 });
+    const kicked = await joinedSocket.waitFor(
+      (message) => message.type === 'player_kicked',
+      '被踢玩家收到通知',
+    );
+    assert(kicked.payload.playerId === joined.body.data.self.playerId, '被踢通知 playerId 不一致');
+    const ownerEvent = await ownerSocket.waitFor(
+      (message) => message.type === 'player_kicked' && message.requestId === 'owner_kick_joined',
+      '房主收到踢人广播',
+    );
+    assert(ownerEvent.payload.seatIndex === 1, '踢人广播座位不一致');
+    const snapshot = await request('GET', `/api/v1/rooms/${owner.body.data.room.roomId}/snapshot`, {
+      token: owner.body.data.playerToken,
+    });
+    expectSuccess(snapshot);
+    assert(snapshot.body.data.tableState.seats[1] === null, '被踢后座位应为空');
+    const kickedSnapshot = await request('GET', `/api/v1/rooms/${owner.body.data.room.roomId}/snapshot`, {
+      token: joined.body.data.playerToken,
+    });
+    expectError(kickedSnapshot, 401, 'INVALID_PLAYER_TOKEN');
+    ownerSocket.close();
+    joinedSocket.close();
+    await request('POST', `/api/v1/rooms/${owner.body.data.room.roomId}/leave`, {
+      token: owner.body.data.playerToken,
+      body: { reason: 'close_kick_test_room' },
+    });
+  });
+
+  await check('W10', 'WebSocket', 'ready 状态广播', 'WS ready', async () => {
     const ownerSocket = context.startedSockets[0];
     const joinedSocket = context.startedSockets[1];
     ownerSocket.send('ready', 'owner_ready', { ready: true });
@@ -689,7 +747,7 @@ async function runWebSocketTests() {
     assert(joinedAck.payload.seat.ready === true, 'joined ready 未变为 true');
   });
 
-  await check('W09', 'WebSocket', '房主开局成功，AI 补齐且仅返回自己的手牌', 'WS start_game', async () => {
+  await check('W11', 'WebSocket', '房主开局成功，AI 补齐且仅返回自己的手牌', 'WS start_game', async () => {
     const ownerSocket = context.startedSockets[0];
     ownerSocket.send('start_game', 'owner_start');
     const started = await ownerSocket.waitFor(
@@ -703,14 +761,14 @@ async function runWebSocketTests() {
     assert(!JSON.stringify(started.payload.tableState.seats).includes('cardId'), '公共座位信息疑似泄露手牌');
   });
 
-  await check('W10', 'HTTP 接口', '开局后禁止新玩家加入', 'POST /api/v1/rooms/by-code/:roomCode/join', async () => {
+  await check('W12', 'HTTP 接口', '开局后禁止新玩家加入', 'POST /api/v1/rooms/by-code/:roomCode/join', async () => {
     const result = await request('POST', `/api/v1/rooms/by-code/${context.startedOwner.room.roomCode}/join`, {
       body: { nickname: '迟到玩家', seatIndex: 2 },
     });
     expectError(result, 409, 'ROOM_ALREADY_PLAYING');
   });
 
-  await check('W11', 'WebSocket', 'sync_state 返回最新快照', 'WS sync_state', async () => {
+  await check('W13', 'WebSocket', 'sync_state 返回最新快照', 'WS sync_state', async () => {
     const ownerSocket = context.startedSockets[0];
     ownerSocket.send('sync_state', 'sync_after_start');
     const snapshot = await ownerSocket.waitFor(
@@ -721,7 +779,7 @@ async function runWebSocketTests() {
     assert(snapshot.payload.myHand.length === 9, 'sync_state owner 手牌不是 9 张');
   });
 
-  await check('W12', 'WebSocket', '非当前回合出牌被拒绝', 'WS play_cards', async () => {
+  await check('W14', 'WebSocket', '非当前回合出牌被拒绝', 'WS play_cards', async () => {
     const ownerSocket = context.startedSockets[0];
     const joinedSocket = context.startedSockets[1];
     ownerSocket.send('sync_state', 'owner_turn_probe');
@@ -748,7 +806,7 @@ async function runWebSocketTests() {
     assert(error.payload.code === 'NOT_YOUR_TURN', `错误码应为 NOT_YOUR_TURN，实际 ${error.payload.code}`);
   });
 
-  await check('W13', 'WebSocket', '当前玩家提交不存在的牌被拒绝', 'WS play_cards', async () => {
+  await check('W15', 'WebSocket', '当前玩家提交不存在的牌被拒绝', 'WS play_cards', async () => {
     const turn = await waitForHumanTurn('invalid_card_probe');
     turn.socket.send('play_cards', 'invalid_cards', { cardIds: ['not-a-card'] });
     const error = await turn.socket.waitFor(
@@ -758,7 +816,7 @@ async function runWebSocketTests() {
     assert(error.payload.code === 'INVALID_CARDS', `错误码应为 INVALID_CARDS，实际 ${error.payload.code}`);
   });
 
-  await check('W14', 'WebSocket', '当前玩家领出时不能过牌', 'WS pass', async () => {
+  await check('W16', 'WebSocket', '当前玩家领出时不能过牌', 'WS pass', async () => {
     const turn = await waitForHumanTurn('pass_probe');
     if (turn.snapshot.payload.tableState.tableCombo) {
       return '当前桌面已有牌，此局面不是领出，跳过领出过牌校验';
@@ -771,7 +829,7 @@ async function runWebSocketTests() {
     assert(error.payload.code === 'INVALID_REQUEST', `错误码应为 INVALID_REQUEST，实际 ${error.payload.code}`);
   });
 
-  await check('W15', 'WebSocket', '当前玩家合法出牌或可过牌操作', 'WS play_cards/pass', async () => {
+  await check('W17', 'WebSocket', '当前玩家合法出牌或可过牌操作', 'WS play_cards/pass', async () => {
     const turn = await waitForHumanTurn('play_probe');
     const playable = findPlayableCards(
       turn.snapshot.payload.myHand,
@@ -799,7 +857,7 @@ async function runWebSocketTests() {
     return '无可压牌，合法过牌成功';
   });
 
-  await check('W16', 'WebSocket', '断线后用同 token 重连可恢复快照', 'WS reconnect', async () => {
+  await check('W18', 'WebSocket', '断线后用同 token 重连可恢复快照', 'WS reconnect', async () => {
     const temporary = await openSocket(context.startedOwner.room.roomId, context.startedOwner.playerToken);
     const initial = await temporary.waitFor((message) => message.type === 'table_snapshot', '临时连接初始快照');
     assert(initial.payload.tableState.roomId === context.startedOwner.room.roomId, '临时连接 roomId 异常');

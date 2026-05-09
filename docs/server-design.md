@@ -972,16 +972,103 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 }
 ```
 
-### 11.3 房主开始游戏
+### 11.3 玩家换座
+
+等待房间内，任意真人玩家可以换到空座位。换座后玩家所属队伍按新座位重新计算，准备状态重置为未准备。
+
+客户端发送：
+
+```json
+{
+  "type": "move_seat",
+  "requestId": "req_ws_011",
+  "roomId": "r_90001",
+  "seq": 11,
+  "payload": {
+    "seatIndex": 3
+  }
+}
+```
+
+服务端校验：
+
+- 房间状态为 `waiting`。
+- `seatIndex` 是 0 到 5 的整数。
+- 目标座位为空。
+
+服务端向每名玩家分别推送最新快照：
+
+```json
+{
+  "type": "seat_updated",
+  "requestId": "req_ws_011",
+  "roomId": "r_90001",
+  "eventSeq": 132,
+  "serverTime": 1778150000000,
+  "payload": {
+    "tableState": {},
+    "myHand": [],
+    "eventSeq": 132
+  }
+}
+```
+
+### 11.4 房主移出玩家
+
+等待房间内，房主可以将其他真人玩家移出房间。
+
+客户端发送：
+
+```json
+{
+  "type": "kick_player",
+  "requestId": "req_ws_012",
+  "roomId": "r_90001",
+  "seq": 12,
+  "payload": {
+    "seatIndex": 2
+  }
+}
+```
+
+服务端校验：
+
+- 发送者是房主。
+- 房间状态为 `waiting`。
+- `seatIndex` 是 0 到 5 的整数。
+- 目标座位上有其他真人玩家。
+- 房主不能移出自己。
+
+服务端通知被移出的玩家并关闭其 WebSocket：
+
+```json
+{
+  "type": "player_kicked",
+  "roomId": "r_90001",
+  "eventSeq": 133,
+  "serverTime": 1778150000000,
+  "payload": {
+    "seatIndex": 2,
+    "playerId": "p_10002",
+    "nickname": "玩家2",
+    "reason": "owner_kick",
+    "message": "你已被房主移出房间"
+  }
+}
+```
+
+其他玩家收到 `player_kicked` 后，再收到最新 `seat_updated` 快照。
+
+### 11.5 房主开始游戏
 
 客户端发送：
 
 ```json
 {
   "type": "start_game",
-  "requestId": "req_ws_011",
+  "requestId": "req_ws_013",
   "roomId": "r_90001",
-  "seq": 11,
+  "seq": 13,
   "payload": {}
 }
 ```
@@ -999,9 +1086,9 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 ```json
 {
   "type": "game_started",
-  "requestId": "req_ws_011",
+  "requestId": "req_ws_013",
   "roomId": "r_90001",
-  "eventSeq": 132,
+  "eventSeq": 134,
   "serverTime": 1778150000000,
   "payload": {
     "tableState": {
@@ -1052,7 +1139,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 
 说明：`myHand` 每名玩家不同，不能广播同一份手牌给所有连接。
 
-### 11.4 出牌
+### 11.6 出牌
 
 客户端发送：
 
@@ -1133,7 +1220,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 
 如果玩家出完，`finishRank` 返回数字。
 
-### 11.5 过牌
+### 11.7 过牌
 
 客户端发送：
 
@@ -1195,7 +1282,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 }
 ```
 
-### 11.6 请求状态同步
+### 11.8 请求状态同步
 
 客户端发送：
 
@@ -1289,7 +1376,25 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 }
 ```
 
-### 12.4 玩家断线
+### 12.4 玩家被房主移出
+
+```json
+{
+  "type": "player_kicked",
+  "roomId": "r_90001",
+  "eventSeq": 143,
+  "serverTime": 1778150000000,
+  "payload": {
+    "seatIndex": 2,
+    "playerId": "p_10002",
+    "nickname": "玩家2",
+    "reason": "owner_kick",
+    "message": "你已被房主移出房间"
+  }
+}
+```
+
+### 12.5 玩家断线
 
 ```json
 {
@@ -1305,7 +1410,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 }
 ```
 
-### 12.5 玩家重连
+### 12.6 玩家重连
 
 ```json
 {
@@ -1320,7 +1425,7 @@ wss://api.example.com/ws/v1/tables/{roomId}?playerToken=<playerToken>
 }
 ```
 
-### 12.6 单局结算
+### 12.7 单局结算
 
 ```json
 {

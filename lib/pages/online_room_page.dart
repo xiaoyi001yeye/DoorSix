@@ -216,13 +216,18 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
         _SeatGrid(
           seats: snapshot.seats,
           selfPlayerId: _session!.self.playerId,
+          ownerPlayerId: snapshot.ownerPlayerId,
+          busy: _busy,
+          onMoveToSeat: _moveToSeat,
+          onKickSeat: _confirmKickSeat,
         ),
         const SizedBox(height: 14),
         Row(
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _busy || self == null ? null : () => _sendReady(!self.ready),
+                onPressed:
+                    _busy || self == null ? null : () => _sendReady(!self.ready),
                 icon: Icon(
                   self?.ready == true
                       ? Icons.check_circle_rounded
@@ -512,7 +517,20 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
       return;
     }
 
-    if (type == 'seat_updated' || type == 'player_joined') {
+    if (type == 'player_kicked') {
+      final kickedPlayerId = payload['playerId'] as String?;
+      if (kickedPlayerId == _session?.self.playerId) {
+        unawaited(_handleKickedFromRoom(payload));
+        return;
+      }
+      _logs.add(_eventLabel(type));
+      unawaited(_syncState());
+      return;
+    }
+
+    if (type == 'seat_updated' ||
+        type == 'player_joined' ||
+        type == 'player_left') {
       _logs.add(_eventLabel(type));
       unawaited(_syncState());
       return;
@@ -530,6 +548,8 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
       'game_started' => '游戏开始',
       'seat_updated' => '座位状态更新',
       'player_joined' => '有玩家加入',
+      'player_left' => '有玩家离开',
+      'player_kicked' => '有玩家被移出',
       'player_passed' => '玩家过牌',
       'new_lead_started' => '新一轮开始',
       'round_settled' => '本局结算',
@@ -556,6 +576,45 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
 
   void _sendReady(bool ready) {
     _sendWs('ready', {'ready': ready});
+  }
+
+  void _moveToSeat(int seatIndex) {
+    if (_busy) {
+      return;
+    }
+    _sendWs('move_seat', {'seatIndex': seatIndex});
+  }
+
+  Future<void> _confirmKickSeat(OnlineSeat seat) async {
+    if (_busy || !mounted) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('移出玩家?'),
+          content: Text('将 ${seat.nickname} 移出房间。'),
+          actions: [
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.danger,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('移出'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      _sendWs('kick_player', {'seatIndex': seat.seatIndex});
+    }
   }
 
   void _startGame() {
@@ -612,6 +671,26 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
       }
     });
     _restartOnlineTurnCountdown(snapshot);
+  }
+
+  Future<void> _handleKickedFromRoom(Map<String, dynamic> payload) async {
+    await _socketSub?.cancel();
+    await _socket?.close();
+    if (!mounted) {
+      return;
+    }
+    final message = payload['message'] as String? ?? '你已被房主移出房间';
+    setState(() {
+      _socket = null;
+      _session = null;
+      _snapshot = null;
+      _connected = false;
+      _selectedCardIds.clear();
+      _logs
+        ..clear()
+        ..add(message);
+    });
+    _showMessage(message);
   }
 
   void _syncServerClock(OnlineTableSnapshot snapshot) {
@@ -1085,13 +1164,22 @@ class _SeatGrid extends StatelessWidget {
   const _SeatGrid({
     required this.seats,
     required this.selfPlayerId,
+    required this.ownerPlayerId,
+    required this.busy,
+    required this.onMoveToSeat,
+    required this.onKickSeat,
   });
 
   final List<OnlineSeat?> seats;
   final String selfPlayerId;
+  final String ownerPlayerId;
+  final bool busy;
+  final ValueChanged<int> onMoveToSeat;
+  final ValueChanged<OnlineSeat> onKickSeat;
 
   @override
   Widget build(BuildContext context) {
+    final isOwner = selfPlayerId == ownerPlayerId;
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -1104,49 +1192,95 @@ class _SeatGrid extends StatelessWidget {
       ),
       itemBuilder: (context, index) {
         final seat = index < seats.length ? seats[index] : null;
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            color: AppTheme.panel,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: seat?.playerId == selfPlayerId
-                  ? AppTheme.success
-                  : const Color(0x334CC9F0),
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Row(
-              children: [
-                Text(
-                  '${index + 1}',
-                  style: const TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontWeight: FontWeight.w900,
-                  ),
+        final isSelf = seat?.playerId == selfPlayerId;
+        final canMoveHere = seat == null && !busy;
+        final canKick =
+            isOwner && seat != null && !isSelf && !seat.isAi && !busy;
+        return Material(
+          color: AppTheme.panel,
+          borderRadius: BorderRadius.circular(8),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: canMoveHere ? () => onMoveToSeat(index) : null,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isSelf
+                      ? AppTheme.success
+                      : canMoveHere
+                          ? const Color(0x6679D98B)
+                          : const Color(0x334CC9F0),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    seat == null
-                        ? '空位'
-                        : seat.playerId == selfPlayerId
-                            ? '我'
-                            : seat.nickname,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w800,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                child: Row(
+                  children: [
+                    Text(
+                      '${index + 1}',
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        seat == null
+                            ? '点击入座'
+                            : isSelf
+                                ? '我'
+                                : seat.nickname,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: seat == null
+                              ? AppTheme.textSecondary
+                              : AppTheme.textPrimary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    if (seat == null)
+                      Icon(
+                        Icons.event_seat_outlined,
+                        color: canMoveHere
+                            ? AppTheme.success
+                            : AppTheme.textSecondary,
+                        size: 18,
+                      )
+                    else ...[
+                      Icon(
+                        seat.ready
+                            ? Icons.check_circle_rounded
+                            : Icons.circle_outlined,
+                        color: seat.ready
+                            ? AppTheme.success
+                            : AppTheme.textSecondary,
+                        size: 18,
+                      ),
+                      if (canKick) ...[
+                        const SizedBox(width: 2),
+                        IconButton(
+                          tooltip: '移出玩家',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          onPressed: () => onKickSeat(seat),
+                          icon: const Icon(
+                            Icons.person_remove_alt_1_outlined,
+                            color: AppTheme.danger,
+                            size: 18,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ],
                 ),
-                if (seat != null)
-                  Icon(
-                    seat.ready ? Icons.check_circle_rounded : Icons.circle_outlined,
-                    color: seat.ready ? AppTheme.success : AppTheme.textSecondary,
-                    size: 18,
-                  ),
-              ],
+              ),
             ),
           ),
         );

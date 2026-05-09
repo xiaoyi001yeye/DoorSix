@@ -397,6 +397,14 @@ function findPlayerByToken(state, token) {
   return seat ? { playerId, seat } : null;
 }
 
+function deleteTokensForPlayer(state, playerId) {
+  for (const [token, tokenPlayerId] of Object.entries(state.tokens)) {
+    if (tokenPlayerId === playerId) {
+      delete state.tokens[token];
+    }
+  }
+}
+
 async function authenticateRoomRequest(req, res) {
   const token = req.headers['x-player-token'];
   if (!token) {
@@ -648,6 +656,16 @@ async function broadcastStateSnapshots(state, type, requestIdValue) {
     if (ws.readyState === ws.OPEN) {
       await sendSnapshot(ws, state, requestIdValue, type);
     }
+  }
+}
+
+async function notifyAndClosePlayerSockets(roomId, playerId, message) {
+  const sockets = socketsByRoom.get(roomId);
+  if (!sockets) return;
+  for (const ws of sockets) {
+    if (ws.playerId !== playerId || ws.readyState !== ws.OPEN) continue;
+    ws.send(JSON.stringify(message));
+    ws.close(1000, 'removed_from_room');
   }
 }
 
@@ -1336,6 +1354,67 @@ wss.on('connection', async (ws) => {
           serverTime: now(),
           payload: { seat: seatView(seat) },
         });
+        return;
+      }
+
+      if (message.type === 'move_seat') {
+        if (state.room.status !== 'waiting') throw ['ROOM_ALREADY_PLAYING', '房间已开局'];
+        const targetSeatIndex = message.payload?.seatIndex;
+        if (!validateSeatIndex(targetSeatIndex)) throw ['INVALID_REQUEST', '座位号必须是 0 到 5'];
+        if (targetSeatIndex === seat.seatIndex) {
+          await sendSnapshot(ws, state, message.requestId, 'seat_updated');
+          return;
+        }
+        if (state.seats[targetSeatIndex]) throw ['SEAT_TAKEN', '座位已被占用'];
+
+        const previousSeatIndex = seat.seatIndex;
+        state.seats[previousSeatIndex] = null;
+        seat.seatIndex = targetSeatIndex;
+        seat.team = teamForSeat(targetSeatIndex);
+        seat.ready = false;
+        state.seats[targetSeatIndex] = seat;
+        nextEventSeq(state);
+        await store.setRoom(state);
+        await broadcastStateSnapshots(state, 'seat_updated', message.requestId);
+        return;
+      }
+
+      if (message.type === 'kick_player') {
+        if (state.room.ownerPlayerId !== ws.playerId) throw ['NOT_ROOM_OWNER', '只有房主可操作'];
+        if (state.room.status !== 'waiting') throw ['ROOM_ALREADY_PLAYING', '房间已开局'];
+        const targetSeatIndex = message.payload?.seatIndex;
+        if (!validateSeatIndex(targetSeatIndex)) throw ['INVALID_REQUEST', '座位号必须是 0 到 5'];
+        const targetSeat = state.seats[targetSeatIndex];
+        if (!targetSeat) throw ['SEAT_EMPTY', '座位为空'];
+        if (targetSeat.playerId === ws.playerId) throw ['INVALID_REQUEST', '房主不能踢自己'];
+        if (targetSeat.isAi) throw ['INVALID_REQUEST', '不能踢 AI'];
+
+        state.seats[targetSeatIndex] = null;
+        deleteTokensForPlayer(state, targetSeat.playerId);
+        state.room.playerCount = state.seats.filter((candidate) => candidate && !candidate.isAi).length;
+        nextEventSeq(state);
+        await store.setRoom(state);
+
+        const kickedMessage = {
+          type: 'player_kicked',
+          requestId: null,
+          roomId: ws.roomId,
+          eventSeq: state.eventSeq,
+          serverTime: now(),
+          payload: {
+            seatIndex: targetSeatIndex,
+            playerId: targetSeat.playerId,
+            nickname: targetSeat.nickname,
+            reason: 'owner_kick',
+            message: '你已被房主移出房间',
+          },
+        };
+        await notifyAndClosePlayerSockets(ws.roomId, targetSeat.playerId, kickedMessage);
+        await broadcast(ws.roomId, {
+          ...kickedMessage,
+          requestId: message.requestId,
+        }, { excludePlayerId: targetSeat.playerId });
+        await broadcastStateSnapshots(state, 'seat_updated', message.requestId);
         return;
       }
 

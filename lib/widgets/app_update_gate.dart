@@ -49,10 +49,12 @@ class AppUpdateGate extends StatefulWidget {
   AppUpdateGate({
     super.key,
     required this.child,
+    this.navigatorKey,
     AppUpdateService? service,
   }) : service = service ?? AppUpdateService();
 
   final Widget child;
+  final GlobalKey<NavigatorState>? navigatorKey;
   final AppUpdateService service;
 
   @override
@@ -148,10 +150,14 @@ class _AppUpdateGateState extends State<AppUpdateGate>
     if (_dialogShowing || !mounted) {
       return;
     }
+    final dialogContext = _dialogContext();
+    if (dialogContext == null) {
+      return;
+    }
     _dialogShowing = true;
     try {
       await showDialog<void>(
-        context: context,
+        context: dialogContext,
         barrierDismissible: !info.isForce,
         builder: (context) {
           return AppUpdateDialog(
@@ -163,5 +169,14 @@ class _AppUpdateGateState extends State<AppUpdateGate>
     } finally {
       _dialogShowing = false;
     }
+  }
+
+  BuildContext? _dialogContext() {
+    final navigator = widget.navigatorKey?.currentState;
+    final keyedContext = navigator?.overlay?.context ?? navigator?.context;
+    if (keyedContext != null) {
+      return keyedContext;
+    }
+    return Navigator.maybeOf(context) == null ? null : context;
   }
 }

@@ -28,7 +28,10 @@ void main() async {
 class DoorSixApp extends StatelessWidget {
   const DoorSixApp({super.key});
 
+  static final _rootNavigatorKey = GlobalKey<NavigatorState>();
+
   static final _router = GoRouter(
+    navigatorKey: _rootNavigatorKey,
     routes: [
       GoRoute(
         path: '/',
@@ -79,6 +82,7 @@ class DoorSixApp extends StatelessWidget {
           final settings = CardDisplaySettingsScope.of(context);
           final mediaQuery = MediaQuery.of(context);
           return AppUpdateGate(
+            navigatorKey: _rootNavigatorKey,
             child: MediaQuery(
               data: mediaQuery.copyWith(
                 textScaler: TextScaler.linear(settings.fontScale),

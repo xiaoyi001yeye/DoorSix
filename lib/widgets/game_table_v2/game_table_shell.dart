@@ -19,6 +19,7 @@ enum GameActionKind {
   replay,
   refresh,
   settings,
+  layoutLog,
 }
 
 enum GameActionPlacement {
@@ -106,7 +107,9 @@ class GameTableViewModel {
   final ValueChanged<String> onToggleCard;
 }
 
-class GameTableShell extends StatelessWidget {
+typedef _LayoutDebugKeyProvider = GlobalKey Function(String name);
+
+class GameTableShell extends StatefulWidget {
   const GameTableShell({
     required this.state,
     required this.actions,
@@ -117,11 +120,24 @@ class GameTableShell extends StatelessWidget {
   final List<GameActionItem> actions;
 
   @override
+  State<GameTableShell> createState() => _GameTableShellState();
+}
+
+class _GameTableShellState extends State<GameTableShell> {
+  final _rootKey = GlobalKey(debugLabel: '牌桌根容器');
+  final Map<String, GlobalKey> _debugKeys = {};
+
+  GlobalKey _debugKeyFor(String name) {
+    return _debugKeys.putIfAbsent(name, () => GlobalKey(debugLabel: name));
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isLandscape = constraints.maxWidth > constraints.maxHeight;
         return DecoratedBox(
+          key: _rootKey,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -140,8 +156,217 @@ class GameTableShell extends StatelessWidget {
                 top: false,
                 bottom: false,
                 child: isLandscape
-                    ? _LandscapeTable(state: state, actions: actions)
-                    : _PortraitTable(state: state, actions: actions),
+                    ? _LandscapeTable(
+                        state: widget.state,
+                        actions: _actionsWithLayoutLog(),
+                        debugKeyFor: _debugKeyFor,
+                      )
+                    : _PortraitTable(
+                        state: widget.state,
+                        actions: _actionsWithLayoutLog(),
+                        debugKeyFor: _debugKeyFor,
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  List<GameActionItem> _actionsWithLayoutLog() {
+    return [
+      ...widget.actions,
+      GameActionItem(
+        kind: GameActionKind.layoutLog,
+        label: '布局日志',
+        icon: Icons.bug_report_outlined,
+        placement: GameActionPlacement.topBar,
+        enabled: true,
+        visible: true,
+        onPressed: _showLayoutLog,
+      ),
+    ];
+  }
+
+  void _showLayoutLog() {
+    final report = _buildLayoutReport();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _LayoutLogSheet(report: report),
+    );
+  }
+
+  _LayoutDebugReport _buildLayoutReport() {
+    final rootObject = _rootKey.currentContext?.findRenderObject();
+    final rootBox = rootObject is RenderBox ? rootObject : null;
+    final rootSize = rootBox?.size ?? Size.zero;
+    final rootOrigin = rootBox?.localToGlobal(Offset.zero) ?? Offset.zero;
+    final entries = <_LayoutDebugEntry>[];
+
+    for (final item in _debugKeys.entries) {
+      final renderObject = item.value.currentContext?.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.hasSize) {
+        continue;
+      }
+      final offset = renderObject.localToGlobal(Offset.zero) - rootOrigin;
+      entries.add(
+        _LayoutDebugEntry(
+          name: item.key,
+          rect: offset & renderObject.size,
+          rootSize: rootSize,
+        ),
+      );
+    }
+
+    return _LayoutDebugReport(
+      capturedAt: DateTime.now(),
+      rootSize: rootSize,
+      entries: entries,
+    );
+  }
+}
+
+class _LayoutDebugReport {
+  const _LayoutDebugReport({
+    required this.capturedAt,
+    required this.rootSize,
+    required this.entries,
+  });
+
+  final DateTime capturedAt;
+  final Size rootSize;
+  final List<_LayoutDebugEntry> entries;
+}
+
+class _LayoutDebugEntry {
+  const _LayoutDebugEntry({
+    required this.name,
+    required this.rect,
+    required this.rootSize,
+  });
+
+  final String name;
+  final Rect rect;
+  final Size rootSize;
+
+  double get widthRatio {
+    return rootSize.width == 0 ? 0 : rect.width / rootSize.width;
+  }
+
+  double get heightRatio =>
+      rootSize.height == 0 ? 0 : rect.height / rootSize.height;
+
+  double get leftRatio => rootSize.width == 0 ? 0 : rect.left / rootSize.width;
+
+  double get topRatio => rootSize.height == 0 ? 0 : rect.top / rootSize.height;
+
+  String get summary {
+    return [
+      name,
+      'x=${rect.left.toStringAsFixed(1)} (${_pct(leftRatio)})',
+      'y=${rect.top.toStringAsFixed(1)} (${_pct(topRatio)})',
+      'w=${rect.width.toStringAsFixed(1)} (${_pct(widthRatio)})',
+      'h=${rect.height.toStringAsFixed(1)} (${_pct(heightRatio)})',
+      'cx=${rect.center.dx.toStringAsFixed(1)}',
+      'cy=${rect.center.dy.toStringAsFixed(1)}',
+    ].join(' | ');
+  }
+}
+
+class _LayoutLogSheet extends StatelessWidget {
+  const _LayoutLogSheet({required this.report});
+
+  final _LayoutDebugReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    final rootSize = report.rootSize;
+    return DraggableScrollableSheet(
+      initialChildSize: 0.68,
+      minChildSize: 0.36,
+      maxChildSize: 0.92,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFF8F2DE),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD2B56F),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 12, 10),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.bug_report_outlined,
+                      color: Color(0xFF0C4380),
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        '牌桌布局日志',
+                        style: TextStyle(
+                          color: Color(0xFF0C4380),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+                  children: [
+                    _LayoutLogBlock(
+                      title: '根容器',
+                      lines: [
+                        'size=${rootSize.width.toStringAsFixed(1)} x '
+                            '${rootSize.height.toStringAsFixed(1)}',
+                        'captured=${_formatTime(report.capturedAt)}',
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    for (final entry in report.entries) ...[
+                      _LayoutLogBlock(
+                        title: entry.name,
+                        lines: [
+                          'position: left ${entry.rect.left.toStringAsFixed(1)} '
+                              '(${_pct(entry.leftRatio)}), top '
+                              '${entry.rect.top.toStringAsFixed(1)} '
+                              '(${_pct(entry.topRatio)})',
+                          'size: ${entry.rect.width.toStringAsFixed(1)} x '
+                              '${entry.rect.height.toStringAsFixed(1)} '
+                              '(${_pct(entry.widthRatio)} x '
+                              '${_pct(entry.heightRatio)})',
+                          'center: ${entry.rect.center.dx.toStringAsFixed(1)}, '
+                              '${entry.rect.center.dy.toStringAsFixed(1)}',
+                          'raw: ${entry.summary}',
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -151,14 +376,62 @@ class GameTableShell extends StatelessWidget {
   }
 }
 
+class _LayoutLogBlock extends StatelessWidget {
+  const _LayoutLogBlock({
+    required this.title,
+    required this.lines,
+  });
+
+  final String title;
+  final List<String> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE0C983)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: Color(0xFF0C4380),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 6),
+            for (final line in lines)
+              SelectableText(
+                line,
+                style: const TextStyle(
+                  color: Color(0xFF345B73),
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _LandscapeTable extends StatelessWidget {
   const _LandscapeTable({
     required this.state,
     required this.actions,
+    required this.debugKeyFor,
   });
 
   final GameTableViewModel state;
   final List<GameActionItem> actions;
+  final _LayoutDebugKeyProvider debugKeyFor;
 
   @override
   Widget build(BuildContext context) {
@@ -168,32 +441,47 @@ class _LandscapeTable extends StatelessWidget {
           left: 12,
           right: 12,
           top: 8,
-          child: _GameTopBar(state: state, actions: actions),
+          child: KeyedSubtree(
+            key: debugKeyFor('横屏/顶栏'),
+            child: _GameTopBar(state: state, actions: actions),
+          ),
         ),
         Positioned.fill(
           top: 82,
           bottom: 154,
           left: 18,
           right: 18,
-          child: _SeatStage(state: state),
+          child: KeyedSubtree(
+            key: debugKeyFor('横屏/座位舞台'),
+            child: _SeatStage(state: state, debugKeyFor: debugKeyFor),
+          ),
         ),
         Positioned(
           left: 230,
           right: 280,
           bottom: 18,
-          child: _HandDock(state: state),
+          child: KeyedSubtree(
+            key: debugKeyFor('横屏/手牌区'),
+            child: _HandDock(state: state),
+          ),
         ),
         Positioned(
           right: 28,
           bottom: 38,
           width: 170,
-          child: _ActionColumn(actions: actions),
+          child: KeyedSubtree(
+            key: debugKeyFor('横屏/右侧操作栏'),
+            child: _ActionColumn(actions: actions),
+          ),
         ),
         Positioned(
           left: 132,
           bottom: 66,
           width: 132,
-          child: _UtilityActions(actions: actions),
+          child: KeyedSubtree(
+            key: debugKeyFor('横屏/左下辅助操作'),
+            child: _UtilityActions(actions: actions),
+          ),
         ),
       ],
     );
@@ -204,10 +492,12 @@ class _PortraitTable extends StatelessWidget {
   const _PortraitTable({
     required this.state,
     required this.actions,
+    required this.debugKeyFor,
   });
 
   final GameTableViewModel state;
   final List<GameActionItem> actions;
+  final _LayoutDebugKeyProvider debugKeyFor;
 
   @override
   Widget build(BuildContext context) {
@@ -215,21 +505,33 @@ class _PortraitTable extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-          child: _GameTopBar(state: state, actions: actions),
+          child: KeyedSubtree(
+            key: debugKeyFor('竖屏/顶栏'),
+            child: _GameTopBar(state: state, actions: actions),
+          ),
         ),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: _SeatStage(state: state),
+            child: KeyedSubtree(
+              key: debugKeyFor('竖屏/座位舞台'),
+              child: _SeatStage(state: state, debugKeyFor: debugKeyFor),
+            ),
           ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-          child: _HandDock(state: state),
+          child: KeyedSubtree(
+            key: debugKeyFor('竖屏/手牌区'),
+            child: _HandDock(state: state),
+          ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
-          child: _BottomActions(actions: actions),
+          child: KeyedSubtree(
+            key: debugKeyFor('竖屏/底部操作栏'),
+            child: _BottomActions(actions: actions),
+          ),
         ),
       ],
     );
@@ -258,7 +560,9 @@ class _GameTopBar extends StatelessWidget {
             .toList(growable: false);
         final visibleTopActions = compact
             ? topActions
-                .where((action) => action.kind == GameActionKind.settings)
+                .where((action) =>
+                    action.kind == GameActionKind.settings ||
+                    action.kind == GameActionKind.layoutLog)
                 .toList(growable: false)
             : topActions;
         final roomText =
@@ -371,9 +675,13 @@ class _GameTopBar extends StatelessWidget {
 }
 
 class _SeatStage extends StatelessWidget {
-  const _SeatStage({required this.state});
+  const _SeatStage({
+    required this.state,
+    required this.debugKeyFor,
+  });
 
   final GameTableViewModel state;
+  final _LayoutDebugKeyProvider debugKeyFor;
 
   @override
   Widget build(BuildContext context) {
@@ -386,29 +694,55 @@ class _SeatStage extends StatelessWidget {
             const Positioned.fill(child: _MapMarks()),
             Align(
               alignment: Alignment.center,
-              child: _CenterPlayPanel(
-                state: state,
-                width: centerWidth,
+              child: KeyedSubtree(
+                key: debugKeyFor('中央出牌区'),
+                child: _CenterPlayPanel(
+                  state: state,
+                  width: centerWidth,
+                ),
               ),
             ),
             for (final player in state.players)
-              Align(
-                alignment: _seatAlignment(
-                  _displaySeatIndex(player.seatIndex, state.selfSeat),
-                ),
-                child: _PlayerSeatV2(
-                  player: player,
-                  isCurrent: state.currentSeat == player.seatIndex,
-                  isAlly: player.team == state.selfTeam,
-                  showPlayPointer: state.lastPlayedSeat == player.seatIndex,
-                  countdownSeconds: state.currentSeat == player.seatIndex
-                      ? state.turnSecondsRemaining
-                      : null,
-                ),
+              _MeasuredPlayerSeat(
+                player: player,
+                state: state,
+                debugKeyFor: debugKeyFor,
               ),
           ],
         );
       },
+    );
+  }
+}
+
+class _MeasuredPlayerSeat extends StatelessWidget {
+  const _MeasuredPlayerSeat({
+    required this.player,
+    required this.state,
+    required this.debugKeyFor,
+  });
+
+  final GamePlayer player;
+  final GameTableViewModel state;
+  final _LayoutDebugKeyProvider debugKeyFor;
+
+  @override
+  Widget build(BuildContext context) {
+    final displaySeat = _displaySeatIndex(player.seatIndex, state.selfSeat);
+    return Align(
+      alignment: _seatAlignment(displaySeat),
+      child: KeyedSubtree(
+        key: debugKeyFor('座位${player.seatIndex}/显示$displaySeat'),
+        child: _PlayerSeatV2(
+          player: player,
+          isCurrent: state.currentSeat == player.seatIndex,
+          isAlly: player.team == state.selfTeam,
+          showPlayPointer: state.lastPlayedSeat == player.seatIndex,
+          countdownSeconds: state.currentSeat == player.seatIndex
+              ? state.turnSecondsRemaining
+              : null,
+        ),
+      ),
     );
   }
 }
@@ -1221,4 +1555,11 @@ Alignment _seatAlignment(int seat) {
     5 => const Alignment(0.92, 0.42),
     _ => Alignment.center,
   };
+}
+
+String _pct(double value) => '${(value * 100).toStringAsFixed(1)}%';
+
+String _formatTime(DateTime value) {
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${two(value.hour)}:${two(value.minute)}:${two(value.second)}';
 }

@@ -14,11 +14,13 @@ import '../services/online_table_service.dart';
 import '../services/rule_engine.dart';
 import '../services/server_log_store.dart';
 import '../utils/app_theme.dart';
+import '../utils/card_display_settings.dart';
 import '../utils/player_profile_settings.dart';
 import '../widgets/action_bar.dart';
 import '../widgets/app_update_gate.dart';
 import '../widgets/card_display_settings_sheet.dart';
 import '../widgets/game_table_layout.dart';
+import '../widgets/game_table_v2/game_table_shell.dart';
 import '../widgets/hand_area.dart';
 import '../widgets/player_avatar_badge.dart';
 import '../widgets/server_log_sheet.dart';
@@ -274,6 +276,25 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
         selectedCards.isNotEmpty &&
         _engine.canPlay(candidate: selectedCombo, target: snapshot.tableCombo);
     final canPass = isMyTurn && snapshot.tableCombo != null;
+    final useImmersiveTable =
+        CardDisplaySettingsScope.of(context).tableExperience ==
+            GameTableExperience.immersive;
+
+    if (useImmersiveTable) {
+      return _buildImmersivePlaying(
+        snapshot: snapshot,
+        players: players,
+        myHand: myHand,
+        currentSeat: currentSeat,
+        currentPlayer: currentPlayer,
+        lastPlayedBy: lastPlayedBy,
+        selectedCombo: selectedCombo,
+        selectedCards: selectedCards,
+        isMyTurn: isMyTurn,
+        canPlay: canPlay,
+        canPass: canPass,
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -341,6 +362,135 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildImmersivePlaying({
+    required OnlineTableSnapshot snapshot,
+    required List<GamePlayer> players,
+    required List<CardInstance> myHand,
+    required int currentSeat,
+    required GamePlayer currentPlayer,
+    required String? lastPlayedBy,
+    required CardCombo selectedCombo,
+    required List<CardInstance> selectedCards,
+    required bool isMyTurn,
+    required bool canPlay,
+    required bool canPass,
+  }) {
+    final selfSeat = _selfSeat(snapshot)?.seatIndex ??
+        _session?.self.seatIndex ??
+        0;
+    return GameTableShell(
+      state: GameTableViewModel(
+        roomCode: _session!.room.roomCode,
+        roundNo: snapshot.roundNo,
+        teamAScore: snapshot.score.teamA,
+        teamBScore: snapshot.score.teamB,
+        connected: _connected,
+        players: players,
+        selfSeat: selfSeat,
+        selfTeam: _selfTeam(snapshot),
+        currentSeat: snapshot.status == 'playing' ? currentSeat : null,
+        lastPlayedSeat:
+            snapshot.tableCombo == null ? null : snapshot.lastPlayedSeatIndex,
+        activeCombo: snapshot.tableCombo,
+        playedCards: snapshot.tableCombo?.cards ?? const <CardInstance>[],
+        lastPlayedBy: lastPlayedBy,
+        currentPlayerName: currentPlayer.name,
+        passCount: snapshot.passCount,
+        finishOrder: snapshot.finishOrder,
+        hand: myHand,
+        selectedCombo: selectedCombo,
+        canPlay: canPlay,
+        canPass: canPass,
+        isUserTurn: isMyTurn,
+        turnSecondsRemaining: snapshot.status == 'playing'
+            ? _turnSecondsRemaining ?? snapshot.turnDurationSeconds
+            : null,
+        onToggleCard: _toggleCard,
+      ),
+      actions: [
+        GameActionItem(
+          kind: GameActionKind.back,
+          label: '返回',
+          icon: Icons.arrow_back_rounded,
+          placement: GameActionPlacement.topBar,
+          enabled: true,
+          visible: true,
+          onPressed: _handleBackRequest,
+        ),
+        GameActionItem(
+          kind: GameActionKind.refresh,
+          label: '同步',
+          icon: Icons.sync_rounded,
+          placement: GameActionPlacement.topBar,
+          enabled: !_busy,
+          visible: true,
+          onPressed: _syncState,
+        ),
+        GameActionItem(
+          kind: GameActionKind.replay,
+          label: '回放',
+          icon: Icons.replay_rounded,
+          placement: GameActionPlacement.topBar,
+          enabled: true,
+          visible: true,
+          onPressed: _showCombinedLogs,
+        ),
+        GameActionItem(
+          kind: GameActionKind.settings,
+          label: '设置',
+          icon: Icons.settings_rounded,
+          placement: GameActionPlacement.topBar,
+          enabled: true,
+          visible: true,
+          onPressed: () => showCardDisplaySettingsSheet(context),
+        ),
+        GameActionItem(
+          kind: GameActionKind.hint,
+          label: '提示',
+          icon: Icons.lightbulb_outline_rounded,
+          placement: GameActionPlacement.utility,
+          enabled: isMyTurn,
+          visible: true,
+          disabledReason: '还没轮到你',
+          onPressed: () => _hint(myHand, snapshot.tableCombo),
+        ),
+        GameActionItem(
+          kind: GameActionKind.sort,
+          label: '整理',
+          icon: Icons.sort_rounded,
+          placement: GameActionPlacement.secondary,
+          enabled: true,
+          visible: true,
+          onPressed: () => setState(() => _selectedCardIds.clear()),
+        ),
+        GameActionItem(
+          kind: GameActionKind.pass,
+          label: '不出',
+          icon: Icons.keyboard_tab_rounded,
+          placement: GameActionPlacement.secondary,
+          enabled: canPass,
+          visible: true,
+          disabledReason: '新一轮不能不出',
+          onPressed: () => _sendGameAction('pass', {
+            'gameId': snapshot.gameId,
+            'roundNo': snapshot.roundNo,
+            'clientKnownEventSeq': snapshot.eventSeq,
+          }),
+        ),
+        GameActionItem(
+          kind: GameActionKind.play,
+          label: '出牌',
+          icon: Icons.file_upload_outlined,
+          placement: GameActionPlacement.primary,
+          enabled: canPlay,
+          visible: true,
+          disabledReason: isMyTurn ? '请选择可出的牌' : '还没轮到你',
+          onPressed: () => _playSelected(selectedCards, snapshot),
+        ),
+      ],
     );
   }
 

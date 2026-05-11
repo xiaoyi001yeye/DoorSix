@@ -484,55 +484,77 @@ class _LandscapeTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned(
-          left: 12,
-          right: 12,
-          top: 8,
-          child: KeyedSubtree(
-            key: debugKeyFor('横屏/顶栏'),
-            child: _GameTopBar(state: state, actions: actions),
-          ),
-        ),
-        Positioned.fill(
-          top: 82,
-          bottom: 154,
-          left: 18,
-          right: 18,
-          child: KeyedSubtree(
-            key: debugKeyFor('横屏/座位舞台'),
-            child: _SeatStage(state: state, debugKeyFor: debugKeyFor),
-          ),
-        ),
-        Positioned(
-          left: 230,
-          right: 280,
-          bottom: 18,
-          child: KeyedSubtree(
-            key: debugKeyFor('横屏/手牌区'),
-            child: _HandDock(state: state),
-          ),
-        ),
-        Positioned(
-          right: 28,
-          bottom: 38,
-          width: 170,
-          child: KeyedSubtree(
-            key: debugKeyFor('横屏/右侧操作栏'),
-            child: _ActionColumn(actions: actions),
-          ),
-        ),
-        Positioned(
-          left: 132,
-          bottom: 66,
-          width: 132,
-          child: KeyedSubtree(
-            key: debugKeyFor('横屏/左下辅助操作'),
-            child: _UtilityActions(actions: actions),
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact =
+            constraints.maxHeight < 430 || constraints.maxWidth < 900;
+        final actionWidth = compact ? 150.0 : 170.0;
+        final actionRight = compact ? 16.0 : 28.0;
+        final actionBottom = compact ? 34.0 : 38.0;
+        final handLeft = compact
+            ? math.max(160.0, constraints.maxWidth * 0.28)
+            : 230.0;
+        final handRight = compact ? actionWidth + actionRight + 40.0 : 280.0;
+        final stageTop = compact ? 74.0 : 82.0;
+        final stageBottom = compact ? 174.0 : 154.0;
+        final utilityLeft = compact ? 86.0 : 132.0;
+        final utilityBottom = compact ? 56.0 : 66.0;
+
+        return Stack(
+          children: [
+            Positioned(
+              left: 12,
+              right: 12,
+              top: 8,
+              child: KeyedSubtree(
+                key: debugKeyFor('横屏/顶栏'),
+                child: _GameTopBar(state: state, actions: actions),
+              ),
+            ),
+            Positioned.fill(
+              top: stageTop,
+              bottom: stageBottom,
+              left: 18,
+              right: compact ? actionWidth + actionRight + 32 : 18,
+              child: KeyedSubtree(
+                key: debugKeyFor('横屏/座位舞台'),
+                child: _SeatStage(
+                  state: state,
+                  debugKeyFor: debugKeyFor,
+                  forceCompact: compact,
+                ),
+              ),
+            ),
+            Positioned(
+              left: handLeft,
+              right: handRight,
+              bottom: compact ? 10 : 18,
+              child: KeyedSubtree(
+                key: debugKeyFor('横屏/手牌区'),
+                child: _HandDock(state: state, compact: compact),
+              ),
+            ),
+            Positioned(
+              right: actionRight,
+              bottom: actionBottom,
+              width: actionWidth,
+              child: KeyedSubtree(
+                key: debugKeyFor('横屏/右侧操作栏'),
+                child: _ActionColumn(actions: actions, compact: compact),
+              ),
+            ),
+            Positioned(
+              left: utilityLeft,
+              bottom: utilityBottom,
+              width: compact ? 116 : 132,
+              child: KeyedSubtree(
+                key: debugKeyFor('横屏/左下辅助操作'),
+                child: _UtilityActions(actions: actions),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -727,16 +749,32 @@ class _SeatStage extends StatelessWidget {
   const _SeatStage({
     required this.state,
     required this.debugKeyFor,
+    this.forceCompact = false,
   });
 
   final GameTableViewModel state;
   final _LayoutDebugKeyProvider debugKeyFor;
+  final bool forceCompact;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final centerWidth = math.min(340.0, constraints.maxWidth * 0.36);
+        final compact =
+            forceCompact ||
+            constraints.maxHeight < 170 ||
+            constraints.maxWidth < 650;
+        final centerWidth = compact
+            ? 196.0
+            : math.min(340.0, constraints.maxWidth * 0.36);
+        if (compact) {
+          return _CompactSeatStage(
+            state: state,
+            debugKeyFor: debugKeyFor,
+            centerWidth: centerWidth,
+          );
+        }
+
         return Stack(
           clipBehavior: Clip.none,
           children: [
@@ -756,7 +794,101 @@ class _SeatStage extends StatelessWidget {
                 player: player,
                 state: state,
                 debugKeyFor: debugKeyFor,
+                compact: false,
               ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CompactSeatStage extends StatelessWidget {
+  const _CompactSeatStage({
+    required this.state,
+    required this.debugKeyFor,
+    required this.centerWidth,
+  });
+
+  final GameTableViewModel state;
+  final _LayoutDebugKeyProvider debugKeyFor;
+  final double centerWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final seatWidth = math.min(
+          154.0,
+          math.max(112.0, (constraints.maxWidth - 24) / 3),
+        );
+        final compactScale = seatWidth / 154.0;
+        final seatHeight = 54.0 * compactScale;
+        final centerGap = 10.0 * compactScale;
+        final middleWidth = math.max(
+          118.0,
+          constraints.maxWidth - (seatWidth * 2) - (centerGap * 2),
+        );
+        final compactCenterWidth = math.min(
+          centerWidth * compactScale,
+          middleWidth,
+        );
+        final centerHeight = 48.0 * compactScale;
+        final maxX = math.max(0.0, constraints.maxWidth - seatWidth);
+        final maxY = math.max(0.0, constraints.maxHeight - seatHeight);
+        final centerLeft = (constraints.maxWidth - compactCenterWidth) / 2;
+        final centerTop =
+            maxY + math.max(0.0, (seatHeight - centerHeight) / 2);
+
+        Offset seatOffset(GamePlayer player) {
+          final displaySeat =
+              _displaySeatIndex(player.seatIndex, state.selfSeat);
+          return switch (displaySeat) {
+            1 => Offset(0, maxY),
+            2 => Offset.zero,
+            3 => Offset(maxX / 2, 0),
+            4 => Offset(maxX, 0),
+            5 => Offset(maxX, maxY),
+            _ => Offset(maxX / 2, maxY),
+          };
+        }
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: centerLeft,
+              top: centerTop,
+              child: KeyedSubtree(
+                key: debugKeyFor('中央出牌区'),
+                child: _CenterPlayPanel(
+                  state: state,
+                  width: compactCenterWidth,
+                  compact: true,
+                  compactScale: compactScale,
+                ),
+              ),
+            ),
+            for (final player in state.players)
+              if (_displaySeatIndex(player.seatIndex, state.selfSeat) != 0)
+                Positioned(
+                  left: seatOffset(player).dx,
+                  top: seatOffset(player).dy,
+                  child: KeyedSubtree(
+                    key: debugKeyFor(
+                      '座位${player.seatIndex}/显示'
+                      '${_displaySeatIndex(player.seatIndex, state.selfSeat)}',
+                    ),
+                    child: _PlayerSeatV2(
+                      player: player,
+                      isCurrent: state.currentSeat == player.seatIndex,
+                      isAlly: player.team == state.selfTeam,
+                      showPlayPointer: false,
+                      compact: true,
+                      compactScale: compactScale,
+                    ),
+                  ),
+                ),
           ],
         );
       },
@@ -769,11 +901,13 @@ class _MeasuredPlayerSeat extends StatelessWidget {
     required this.player,
     required this.state,
     required this.debugKeyFor,
+    required this.compact,
   });
 
   final GamePlayer player;
   final GameTableViewModel state;
   final _LayoutDebugKeyProvider debugKeyFor;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -790,6 +924,7 @@ class _MeasuredPlayerSeat extends StatelessWidget {
           countdownSeconds: state.currentSeat == player.seatIndex
               ? state.turnSecondsRemaining
               : null,
+          compact: compact,
         ),
       ),
     );
@@ -800,14 +935,120 @@ class _CenterPlayPanel extends StatelessWidget {
   const _CenterPlayPanel({
     required this.state,
     required this.width,
+    this.compact = false,
+    this.compactScale = 1,
   });
 
   final GameTableViewModel state;
   final double width;
+  final bool compact;
+  final double compactScale;
 
   @override
   Widget build(BuildContext context) {
     final playedCards = state.playedCards;
+    if (compact) {
+      final scale = compactScale;
+      final panelHeight = 48.0 * scale;
+      final cardWidth = 28.0 * scale;
+      final cardHeight = 40.0 * scale;
+      final sideWidth = math.max(58.0, 72.0 * scale);
+      final titleFont = math.max(10.5, 12.0 * scale);
+      final metaFont = math.max(9.5, 11.0 * scale);
+      return Container(
+        width: width,
+        height: panelHeight,
+        padding: EdgeInsets.symmetric(
+          horizontal: 10.0 * scale,
+          vertical: 4.0 * scale,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFD8B66D), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 12,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: cardHeight,
+                child: playedCards.isEmpty
+                    ? Center(
+                        child: Text(
+                          '新一轮',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: const Color(0xFF0C4380),
+                            fontWeight: FontWeight.w900,
+                            fontSize: titleFont,
+                          ),
+                        ),
+                      )
+                    : SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: Row(
+                          children: [
+                            for (final card in playedCards)
+                              HandCard(
+                                card: card.copyWith(selected: false),
+                                onTap: () {},
+                                width: cardWidth,
+                                height: cardHeight,
+                                trailingMargin: 3,
+                                showSelectionOffset: false,
+                              ),
+                          ],
+                        ),
+                      ),
+              ),
+            ),
+            SizedBox(width: 8 * scale),
+            SizedBox(
+              width: sideWidth,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    state.activeCombo == null
+                        ? '等待首出'
+                        : state.activeCombo!.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: const Color(0xFF0C4380),
+                      fontWeight: FontWeight.w900,
+                      fontSize: titleFont,
+                    ),
+                  ),
+                  SizedBox(height: 2 * scale),
+                  Text(
+                    '轮到 ${state.currentPlayerName}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: const Color(0xFF345B73),
+                      fontWeight: FontWeight.w800,
+                      fontSize: metaFont,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       width: width,
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
@@ -906,6 +1147,8 @@ class _PlayerSeatV2 extends StatelessWidget {
     required this.isAlly,
     required this.showPlayPointer,
     this.countdownSeconds,
+    this.compact = false,
+    this.compactScale = 1,
   });
 
   final GamePlayer player;
@@ -913,6 +1156,8 @@ class _PlayerSeatV2 extends StatelessWidget {
   final bool isAlly;
   final bool showPlayPointer;
   final int? countdownSeconds;
+  final bool compact;
+  final double compactScale;
 
   @override
   Widget build(BuildContext context) {
@@ -922,23 +1167,42 @@ class _PlayerSeatV2 extends StatelessWidget {
             ? const Color(0xFF4B8FD4)
             : const Color(0xFFD09B3A);
     final name = player.isUser ? '玩家' : player.name;
+    final scale = compact ? compactScale : 1.0;
+    final seatWidth = compact ? 154.0 * scale : 212.0;
+    final seatHeight = compact ? 54.0 * scale : 76.0;
+    final avatarSize = compact ? math.max(32.0, 40.0 * scale) : 58.0;
+    final iconSize = compact ? math.max(16.0, 19.0 * scale) : 26.0;
+    final nameFont = compact ? math.max(11.0, 14.0 * scale) : 18.0;
+    final metaFont = compact ? math.max(9.0, 10.0 * scale) : 12.0;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (countdownSeconds != null && isCurrent) ...[
           _SmallBluePill(text: '${countdownSeconds}s'),
-          const SizedBox(height: 4),
+          SizedBox(height: compact ? 2 : 4),
         ],
         if (showPlayPointer)
-          const Icon(Icons.arrow_drop_down_rounded, color: Color(0xFFD09B3A), size: 28),
+          Icon(
+            Icons.arrow_drop_down_rounded,
+            color: const Color(0xFFD09B3A),
+            size: compact ? 20 : 28,
+        ),
         Container(
-          width: 212,
-          height: 76,
-          padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+          width: seatWidth,
+          height: seatHeight,
+          padding: EdgeInsets.fromLTRB(
+            compact ? 6 * scale : 8,
+            compact ? 6 * scale : 8,
+            compact ? 8 * scale : 12,
+            compact ? 6 * scale : 8,
+          ),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.72),
-            borderRadius: BorderRadius.circular(38),
-            border: Border.all(color: borderColor, width: isCurrent ? 2.2 : 1.4),
+            borderRadius: BorderRadius.circular(compact ? 27 : 38),
+            border: Border.all(
+              color: borderColor,
+              width: isCurrent ? 2.2 : 1.4,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.14),
@@ -951,10 +1215,10 @@ class _PlayerSeatV2 extends StatelessWidget {
             children: [
               PlayerAvatarBadge(
                 avatarId: player.avatarId,
-                size: 58,
+                size: avatarSize,
                 showRing: true,
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: compact ? 7 * scale : 10),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -964,23 +1228,23 @@ class _PlayerSeatV2 extends StatelessWidget {
                       children: [
                         if (player.isUser) ...[
                           _DealerMark(team: player.team),
-                          const SizedBox(width: 4),
+                          SizedBox(width: compact ? 3 : 4),
                         ],
                         Expanded(
                           child: Text(
                             name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF0C4380),
+                            style: TextStyle(
+                              color: const Color(0xFF0C4380),
                               fontWeight: FontWeight.w900,
-                              fontSize: 18,
+                              fontSize: nameFont,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: compact ? 2 : 4),
                     Text(
                       _metaText,
                       maxLines: 1,
@@ -990,14 +1254,18 @@ class _PlayerSeatV2 extends StatelessWidget {
                             ? const Color(0xFF345B73)
                             : const Color(0xFF247A37),
                         fontWeight: FontWeight.w800,
-                        fontSize: 12,
+                        fontSize: metaFont,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
-              const Icon(Icons.style_rounded, color: Color(0xFF1F65B5), size: 26),
+              SizedBox(width: compact ? 4 * scale : 6),
+              Icon(
+                Icons.style_rounded,
+                color: const Color(0xFF1F65B5),
+                size: iconSize,
+              ),
             ],
           ),
         ),
@@ -1017,9 +1285,13 @@ class _PlayerSeatV2 extends StatelessWidget {
 }
 
 class _HandDock extends StatelessWidget {
-  const _HandDock({required this.state});
+  const _HandDock({
+    required this.state,
+    this.compact = false,
+  });
 
   final GameTableViewModel state;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1030,11 +1302,16 @@ class _HandDock extends StatelessWidget {
             ? '${state.selectedCombo.label}${state.canPlay ? '，可以出' : '，压不过上家'}'
             : state.selectedCombo.label;
     return Container(
-      constraints: const BoxConstraints(minHeight: 130),
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+      constraints: BoxConstraints(minHeight: compact ? 112 : 130),
+      padding: EdgeInsets.fromLTRB(
+        compact ? 14 : 18,
+        compact ? 10 : 14,
+        compact ? 14 : 18,
+        compact ? 12 : 16,
+      ),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(compact ? 22 : 26),
         border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.2),
         boxShadow: [
           BoxShadow(
@@ -1075,10 +1352,11 @@ class _HandDock extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: compact ? 6 : 8),
           _V2HandScroller(
             cards: state.hand,
             onToggle: state.onToggleCard,
+            compact: compact,
           ),
         ],
       ),
@@ -1090,27 +1368,32 @@ class _V2HandScroller extends StatelessWidget {
   const _V2HandScroller({
     required this.cards,
     required this.onToggle,
+    this.compact = false,
   });
 
   final List<CardInstance> cards;
   final ValueChanged<String> onToggle;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     if (cards.isEmpty) {
-      return const SizedBox(
-        height: 86,
-        child: Center(
-          child: Text('手牌已出完', style: TextStyle(color: Color(0xFF6D6B61))),
+      return SizedBox(
+        height: compact ? 72 : 86,
+        child: const Center(
+          child: Text(
+            '手牌已出完',
+            style: TextStyle(color: Color(0xFF6D6B61)),
+          ),
         ),
       );
     }
 
-    const cardWidth = 68.0;
-    const cardHeight = 98.0;
-    const selectedLift = 18.0;
-    const minStep = 30.0;
-    const preferredStep = 48.0;
+    final cardWidth = compact ? 52.0 : 68.0;
+    final cardHeight = compact ? 75.0 : 98.0;
+    final selectedLift = compact ? 12.0 : 18.0;
+    final minStep = compact ? 24.0 : 30.0;
+    final preferredStep = compact ? 36.0 : 48.0;
 
     return SizedBox(
       height: cardHeight + selectedLift,
@@ -1168,9 +1451,13 @@ class _V2HandScroller extends StatelessWidget {
 }
 
 class _ActionColumn extends StatelessWidget {
-  const _ActionColumn({required this.actions});
+  const _ActionColumn({
+    required this.actions,
+    this.compact = false,
+  });
 
   final List<GameActionItem> actions;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1183,9 +1470,9 @@ class _ActionColumn extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final action in buttons) ...[
-          _ActionButton(action: action),
-          const SizedBox(height: 12),
+        for (var index = 0; index < buttons.length; index += 1) ...[
+          _ActionButton(action: buttons[index], compact: compact),
+          if (index != buttons.length - 1) SizedBox(height: compact ? 10 : 12),
         ],
       ],
     );

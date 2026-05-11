@@ -1047,9 +1047,9 @@ class _MapMarks extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
+    return const IgnorePointer(
       child: Stack(
-        children: const [
+        children: [
           Positioned(
             left: 24,
             top: 8,

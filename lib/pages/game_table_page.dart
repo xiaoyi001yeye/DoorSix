@@ -11,11 +11,13 @@ import '../models/round_result.dart';
 import '../models/rule_set.dart';
 import '../services/rule_engine.dart';
 import '../utils/app_theme.dart';
+import '../utils/card_display_settings.dart';
 import '../utils/game_runtime_config.dart';
 import '../utils/player_profile_settings.dart';
 import '../widgets/action_bar.dart';
 import '../widgets/card_display_settings_sheet.dart';
 import '../widgets/game_table_layout.dart';
+import '../widgets/game_table_v2/game_table_shell.dart';
 import '../widgets/hand_area.dart';
 import '../widgets/rule_badge.dart';
 import '../widgets/table_center.dart';
@@ -92,6 +94,9 @@ class _GameTablePageState extends State<GameTablePage> {
     final currentPlayer = _players[_currentSeat];
     final lastPlayedBy =
         _lastPlayedSeat == null ? null : _players[_lastPlayedSeat!].name;
+    final useImmersiveTable =
+        CardDisplaySettingsScope.of(context).tableExperience ==
+            GameTableExperience.immersive;
 
     return PopScope<void>(
       canPop: false,
@@ -105,47 +110,163 @@ class _GameTablePageState extends State<GameTablePage> {
         body: SafeArea(
           top: false,
           bottom: false,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final isLandscape = constraints.maxWidth > constraints.maxHeight;
-              return Column(
-                children: [
-                  _buildHeader(),
-                  if (isLandscape)
-                    Expanded(
-                      child: Row(
-                        children: [
+          child: useImmersiveTable
+              ? _buildImmersiveTable(
+                  currentPlayer: currentPlayer,
+                  lastPlayedBy: lastPlayedBy,
+                )
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isLandscape =
+                        constraints.maxWidth > constraints.maxHeight;
+                    return Column(
+                      children: [
+                        _buildHeader(),
+                        if (isLandscape)
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTableArea(
+                                    currentPlayer: currentPlayer,
+                                    lastPlayedBy: lastPlayedBy,
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 360,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: _buildHandAndActions(),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else ...[
                           Expanded(
                             child: _buildTableArea(
                               currentPlayer: currentPlayer,
                               lastPlayedBy: lastPlayedBy,
                             ),
                           ),
-                          SizedBox(
-                            width: 360,
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: _buildHandAndActions(),
-                            ),
-                          ),
+                          _buildHandAndActions(),
                         ],
-                      ),
-                    )
-                  else ...[
-                    Expanded(
-                      child: _buildTableArea(
-                        currentPlayer: currentPlayer,
-                        lastPlayedBy: lastPlayedBy,
-                      ),
-                    ),
-                    _buildHandAndActions(),
-                  ],
-                ],
-              );
-            },
-          ),
+                      ],
+                    );
+                  },
+                ),
         ),
       ),
+    );
+  }
+
+  Widget _buildImmersiveTable({
+    required GamePlayer currentPlayer,
+    required String? lastPlayedBy,
+  }) {
+    final players = _playersForDisplay();
+    return GameTableShell(
+      state: GameTableViewModel(
+        roundNo: _round,
+        teamAScore: _teamAScore,
+        teamBScore: _teamBScore,
+        players: players,
+        selfSeat: 0,
+        selfTeam: players[0].team,
+        currentSeat: _roundResult == null ? _currentSeat : null,
+        lastPlayedSeat: _activeCombo == null ? null : _lastPlayedSeat,
+        activeCombo: _activeCombo,
+        playedCards: _lastPlayedCards,
+        lastPlayedBy: lastPlayedBy,
+        currentPlayerName: currentPlayer.name,
+        passCount: _passCount,
+        finishOrder: _finishOrder,
+        hand: _myHand,
+        selectedCombo: _selectedCombo,
+        canPlay: _canPlay,
+        canPass: _canPass,
+        isUserTurn: _isUserTurn,
+        turnSecondsRemaining:
+            _roundResult == null ? _turnSecondsRemaining : null,
+        onToggleCard: _toggleCard,
+      ),
+      actions: [
+        GameActionItem(
+          kind: GameActionKind.back,
+          label: '返回',
+          icon: Icons.arrow_back_rounded,
+          placement: GameActionPlacement.topBar,
+          enabled: true,
+          visible: true,
+          onPressed: _handleBackRequest,
+        ),
+        GameActionItem(
+          kind: GameActionKind.rules,
+          label: '规则',
+          icon: Icons.help_outline_rounded,
+          placement: GameActionPlacement.topBar,
+          enabled: true,
+          visible: true,
+          onPressed: _showRuleSheet,
+        ),
+        GameActionItem(
+          kind: GameActionKind.replay,
+          label: '回放',
+          icon: Icons.replay_rounded,
+          placement: GameActionPlacement.topBar,
+          enabled: true,
+          visible: true,
+          onPressed: _showLogSheet,
+        ),
+        GameActionItem(
+          kind: GameActionKind.settings,
+          label: '设置',
+          icon: Icons.settings_rounded,
+          placement: GameActionPlacement.topBar,
+          enabled: true,
+          visible: true,
+          onPressed: () => showCardDisplaySettingsSheet(context),
+        ),
+        GameActionItem(
+          kind: GameActionKind.hint,
+          label: '提示',
+          icon: Icons.lightbulb_outline_rounded,
+          placement: GameActionPlacement.utility,
+          enabled: _isUserTurn,
+          visible: true,
+          disabledReason: '还没轮到你',
+          onPressed: _hint,
+        ),
+        GameActionItem(
+          kind: GameActionKind.sort,
+          label: '整理',
+          icon: Icons.sort_rounded,
+          placement: GameActionPlacement.secondary,
+          enabled: true,
+          visible: true,
+          onPressed: _sortMine,
+        ),
+        GameActionItem(
+          kind: GameActionKind.pass,
+          label: '不出',
+          icon: Icons.keyboard_tab_rounded,
+          placement: GameActionPlacement.secondary,
+          enabled: _canPass,
+          visible: true,
+          disabledReason: '新一轮不能不出',
+          onPressed: _pass,
+        ),
+        GameActionItem(
+          kind: GameActionKind.play,
+          label: '出牌',
+          icon: Icons.file_upload_outlined,
+          placement: GameActionPlacement.primary,
+          enabled: _canPlay,
+          visible: true,
+          disabledReason: _isUserTurn ? '请选择可出的牌' : '还没轮到你',
+          onPressed: _playSelected,
+        ),
+      ],
     );
   }
 

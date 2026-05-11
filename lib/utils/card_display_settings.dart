@@ -13,6 +13,15 @@ enum FontSizePreset {
   final double scale;
 }
 
+enum GameTableExperience {
+  legacy('经典牌桌'),
+  immersive('新版牌桌');
+
+  const GameTableExperience(this.label);
+
+  final String label;
+}
+
 class CardDisplayMetrics {
   const CardDisplayMetrics({
     required this.scale,
@@ -45,13 +54,16 @@ class CardDisplaySettings extends ChangeNotifier {
 
   static const _scaleKey = 'card_display_scale';
   static const _fontSizePresetKey = 'font_size_preset';
+  static const _tableExperienceKey = 'game_table_experience';
 
   double _scale = minScale;
   FontSizePreset _fontSizePreset = FontSizePreset.medium;
+  GameTableExperience _tableExperience = GameTableExperience.legacy;
 
   double get scale => _scale;
   FontSizePreset get fontSizePreset => _fontSizePreset;
   double get fontScale => _fontSizePreset.scale;
+  GameTableExperience get tableExperience => _tableExperience;
 
   CardDisplayMetrics get metrics {
     return CardDisplayMetrics(
@@ -68,6 +80,9 @@ class CardDisplaySettings extends ChangeNotifier {
     _scale = _clampScale(prefs.getDouble(_scaleKey) ?? minScale);
     _fontSizePreset = _presetFromName(
       prefs.getString(_fontSizePresetKey),
+    );
+    _tableExperience = _experienceFromName(
+      prefs.getString(_tableExperienceKey),
     );
   }
 
@@ -92,6 +107,16 @@ class CardDisplaySettings extends ChangeNotifier {
     _saveFontSizePreset(preset);
   }
 
+  void setTableExperience(GameTableExperience experience) {
+    if (experience == _tableExperience) {
+      return;
+    }
+
+    _tableExperience = experience;
+    notifyListeners();
+    _saveTableExperience(experience);
+  }
+
   double _clampScale(double value) {
     return value.clamp(minScale, maxScale).toDouble();
   }
@@ -106,6 +131,11 @@ class CardDisplaySettings extends ChangeNotifier {
     await prefs.setString(_fontSizePresetKey, preset.name);
   }
 
+  Future<void> _saveTableExperience(GameTableExperience experience) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tableExperienceKey, experience.name);
+  }
+
   FontSizePreset _presetFromName(String? name) {
     for (final preset in FontSizePreset.values) {
       if (preset.name == name) {
@@ -113,6 +143,15 @@ class CardDisplaySettings extends ChangeNotifier {
       }
     }
     return FontSizePreset.medium;
+  }
+
+  GameTableExperience _experienceFromName(String? name) {
+    for (final experience in GameTableExperience.values) {
+      if (experience.name == name) {
+        return experience;
+      }
+    }
+    return GameTableExperience.legacy;
   }
 }
 

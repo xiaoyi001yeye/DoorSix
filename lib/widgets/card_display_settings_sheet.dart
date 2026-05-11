@@ -104,6 +104,31 @@ class _CardDisplaySettingsSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 22),
                 const Text(
+                  '牌桌样式',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<GameTableExperience>(
+                    segments: [
+                      for (final experience in GameTableExperience.values)
+                        ButtonSegment(
+                          value: experience,
+                          label: Text(experience.label),
+                        ),
+                    ],
+                    selected: {settings.tableExperience},
+                    onSelectionChanged: (selection) {
+                      settings.setTableExperience(selection.first);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 22),
+                const Text(
                   '字体大小',
                   style: TextStyle(
                     color: AppTheme.textPrimary,

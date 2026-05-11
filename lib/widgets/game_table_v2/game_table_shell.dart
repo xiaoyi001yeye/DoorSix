@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/card_model.dart';
 import '../../models/player_model.dart';
@@ -239,6 +240,39 @@ class _LayoutDebugReport {
   final DateTime capturedAt;
   final Size rootSize;
   final List<_LayoutDebugEntry> entries;
+
+  String toClipboardText() {
+    final lines = <String>[
+      '牌桌布局日志',
+      'root: ${rootSize.width.toStringAsFixed(1)} x '
+          '${rootSize.height.toStringAsFixed(1)}',
+      'captured: ${_formatTime(capturedAt)}',
+      '',
+    ];
+
+    for (final entry in entries) {
+      lines
+        ..add('[${entry.name}]')
+        ..add(
+          'position: left ${entry.rect.left.toStringAsFixed(1)} '
+          '(${_pct(entry.leftRatio)}), top '
+          '${entry.rect.top.toStringAsFixed(1)} (${_pct(entry.topRatio)})',
+        )
+        ..add(
+          'size: ${entry.rect.width.toStringAsFixed(1)} x '
+          '${entry.rect.height.toStringAsFixed(1)} '
+          '(${_pct(entry.widthRatio)} x ${_pct(entry.heightRatio)})',
+        )
+        ..add(
+          'center: ${entry.rect.center.dx.toStringAsFixed(1)}, '
+          '${entry.rect.center.dy.toStringAsFixed(1)}',
+        )
+        ..add('raw: ${entry.summary}')
+        ..add('');
+    }
+
+    return lines.join('\n').trimRight();
+  }
 }
 
 class _LayoutDebugEntry {
@@ -280,6 +314,16 @@ class _LayoutLogSheet extends StatelessWidget {
   const _LayoutLogSheet({required this.report});
 
   final _LayoutDebugReport report;
+
+  Future<void> _copyReport(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: report.toClipboardText()));
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('布局日志已复制')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -323,6 +367,11 @@ class _LayoutLogSheet extends StatelessWidget {
                           fontWeight: FontWeight.w900,
                         ),
                       ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _copyReport(context),
+                      icon: const Icon(Icons.copy_rounded),
+                      label: const Text('复制'),
                     ),
                     IconButton(
                       tooltip: '关闭',

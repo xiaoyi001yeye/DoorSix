@@ -859,7 +859,6 @@ class _SeatStage extends StatelessWidget {
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            const Positioned.fill(child: _MapMarks()),
             Align(
               alignment: Alignment.center,
               child: KeyedSubtree(
@@ -1830,163 +1829,23 @@ class _TopDivider extends StatelessWidget {
 class _InkWashBackdrop extends StatelessWidget {
   const _InkWashBackdrop();
 
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _InkWashPainter(),
-      size: Size.infinite,
-    );
-  }
-}
-
-class _MapMarks extends StatelessWidget {
-  const _MapMarks();
+  static const _assetPath = 'assets/images/tianjin_table_background.png';
 
   @override
   Widget build(BuildContext context) {
     return const IgnorePointer(
-      child: Stack(
-        children: [
-          Positioned(
-            left: 24,
-            top: 8,
-            child: _DecorativeText(
-              title: '天津',
-              subtitle: '海津问渡 · 津门故里',
-            ),
-          ),
-          Positioned(
-            right: 96,
-            top: 22,
-            child: _VerticalLabel(text: '煎饼果子'),
-          ),
-          Positioned(
-            right: 58,
-            bottom: 34,
-            child: _VerticalLabel(text: '狗不理包子'),
-          ),
-          Positioned(
-            left: 300,
-            bottom: 40,
-            child: _VerticalLabel(text: '津门故里'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DecorativeText extends StatelessWidget {
-  const _DecorativeText({
-    required this.title,
-    required this.subtitle,
-  });
-
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: 0.54,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xFF8A6235),
-              fontSize: 46,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              color: Color(0xFF5E4A32),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _VerticalLabel extends StatelessWidget {
-  const _VerticalLabel({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: 0.62,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: DecoratedBox(
         decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFF7E5A33)),
-          color: const Color(0x25FFFFFF),
-        ),
-        child: Text(
-          text.split('').join('\n'),
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Color(0xFF5E3F24),
-            fontWeight: FontWeight.w900,
-            height: 1.05,
+          image: DecorationImage(
+            image: AssetImage(_assetPath),
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
           ),
         ),
+        child: SizedBox.expand(),
       ),
     );
   }
-}
-
-class _InkWashPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final wash = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..color = const Color(0xFF7FA8B7).withValues(alpha: 0.22);
-    final path = Path()
-      ..moveTo(size.width * 0.22, size.height * 0.62)
-      ..cubicTo(
-        size.width * 0.38,
-        size.height * 0.38,
-        size.width * 0.58,
-        size.height * 0.72,
-        size.width * 0.82,
-        size.height * 0.42,
-      );
-    canvas.drawPath(path, wash);
-
-    final skyline = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
-      ..color = const Color(0xFF6D8790).withValues(alpha: 0.18);
-    for (var i = 0; i < 16; i += 1) {
-      final x = size.width * (0.30 + i * 0.028);
-      final h = size.height * (0.06 + (i % 5) * 0.015);
-      canvas.drawLine(
-        Offset(x, size.height * 0.36),
-        Offset(x, size.height * 0.36 - h),
-        skyline,
-      );
-    }
-
-    final vignette = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          Colors.transparent,
-          const Color(0xFF8A6235).withValues(alpha: 0.20),
-        ],
-      ).createShader(Offset.zero & size);
-    canvas.drawRect(Offset.zero & size, vignette);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 BoxDecoration _bluePanelDecoration({required double radius}) {

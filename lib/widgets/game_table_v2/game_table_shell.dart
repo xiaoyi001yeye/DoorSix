@@ -7,6 +7,9 @@ import '../../models/card_model.dart';
 import '../../models/player_model.dart';
 import '../../models/round_result.dart';
 import '../../services/rule_engine.dart';
+import 'config/game_table_layout_config.dart';
+import 'config/game_table_layout_loader.dart';
+import 'config/game_table_layout_resolver.dart';
 import '../hand_card.dart';
 import '../player_avatar_badge.dart';
 
@@ -127,9 +130,38 @@ class GameTableShell extends StatefulWidget {
 class _GameTableShellState extends State<GameTableShell> {
   final _rootKey = GlobalKey(debugLabel: '牌桌根容器');
   final Map<String, GlobalKey> _debugKeys = {};
+  GameTableLayoutConfig _layoutConfig = GameTableLayoutConfig.fallback;
+  String? _layoutConfigError;
 
   GlobalKey _debugKeyFor(String name) {
     return _debugKeys.putIfAbsent(name, () => GlobalKey(debugLabel: name));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLayoutConfig();
+  }
+
+  Future<void> _loadLayoutConfig() async {
+    try {
+      final config = await GameTableLayoutLoader.load();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _layoutConfig = config;
+        _layoutConfigError = null;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _layoutConfig = GameTableLayoutConfig.fallback;
+        _layoutConfigError = error.toString();
+      });
+    }
   }
 
   @override
@@ -161,6 +193,7 @@ class _GameTableShellState extends State<GameTableShell> {
                         state: widget.state,
                         actions: _actionsWithLayoutLog(),
                         debugKeyFor: _debugKeyFor,
+                        layoutConfig: _layoutConfig,
                       )
                     : _PortraitTable(
                         state: widget.state,
@@ -231,6 +264,8 @@ class _GameTableShellState extends State<GameTableShell> {
 
     return _LayoutDebugReport(
       capturedAt: DateTime.now(),
+      layoutConfigId: _layoutConfig.id,
+      layoutConfigError: _layoutConfigError,
       devicePixelRatio: devicePixelRatio,
       screenPhysicalSize: screenPhysicalSize,
       screenLogicalSize: screenLogicalSize,
@@ -243,6 +278,8 @@ class _GameTableShellState extends State<GameTableShell> {
 class _LayoutDebugReport {
   const _LayoutDebugReport({
     required this.capturedAt,
+    required this.layoutConfigId,
+    required this.layoutConfigError,
     required this.devicePixelRatio,
     required this.screenPhysicalSize,
     required this.screenLogicalSize,
@@ -251,6 +288,8 @@ class _LayoutDebugReport {
   });
 
   final DateTime capturedAt;
+  final String layoutConfigId;
+  final String? layoutConfigError;
   final double devicePixelRatio;
   final Size screenPhysicalSize;
   final Size screenLogicalSize;
@@ -260,6 +299,8 @@ class _LayoutDebugReport {
   String toClipboardText() {
     final lines = <String>[
       '牌桌布局日志',
+      'layout config: $layoutConfigId',
+      if (layoutConfigError != null) 'layout config error: $layoutConfigError',
       'devicePixelRatio: ${devicePixelRatio.toStringAsFixed(1)}',
       'screen physical: ${screenPhysicalSize.width.toStringAsFixed(0)} x '
           '${screenPhysicalSize.height.toStringAsFixed(0)}',
@@ -410,6 +451,9 @@ class _LayoutLogSheet extends StatelessWidget {
                     _LayoutLogBlock(
                       title: '根容器',
                       lines: [
+                        'layoutConfig=${report.layoutConfigId}',
+                        if (report.layoutConfigError != null)
+                          'layoutConfigError=${report.layoutConfigError}',
                         'devicePixelRatio='
                             '${report.devicePixelRatio.toStringAsFixed(1)}',
                         'screen physical='
@@ -505,46 +549,35 @@ class _LandscapeTable extends StatelessWidget {
     required this.state,
     required this.actions,
     required this.debugKeyFor,
+    required this.layoutConfig,
   });
 
   final GameTableViewModel state;
   final List<GameActionItem> actions;
   final _LayoutDebugKeyProvider debugKeyFor;
+  final GameTableLayoutConfig layoutConfig;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact =
-            constraints.maxHeight < 430 || constraints.maxWidth < 900;
-        final actionWidth = compact ? 132.0 : 148.0;
-        final actionRight = compact ? 16.0 : 28.0;
-        final actionBottom = compact ? 42.0 : 48.0;
-        final handLeft = compact
-            ? math.max(160.0, constraints.maxWidth * 0.28)
-            : 230.0;
-        final handRight = compact ? actionWidth + actionRight + 40.0 : 252.0;
-        final stageTop = compact ? 74.0 : 82.0;
-        final stageBottom = compact ? 174.0 : 154.0;
-        final utilityLeft = compact ? 86.0 : 132.0;
-        final utilityBottom = compact ? 58.0 : 78.0;
+        final resolvedLayout = GameTableLayoutResolver.resolveLandscape(
+          config: layoutConfig,
+          parentSize: Size(constraints.maxWidth, constraints.maxHeight),
+        );
+        final compact = resolvedLayout.compact;
 
         return Stack(
           children: [
-            Positioned(
-              left: 12,
-              right: 12,
-              top: 8,
+            _PositionedLayer(
+              rect: resolvedLayout.rectFor('top_bar'),
               child: KeyedSubtree(
                 key: debugKeyFor('横屏/顶栏'),
                 child: _GameTopBar(state: state, actions: actions),
               ),
             ),
-            Positioned.fill(
-              top: stageTop,
-              bottom: stageBottom,
-              left: 18,
-              right: compact ? actionWidth + actionRight + 32 : 18,
+            _PositionedLayer(
+              rect: resolvedLayout.rectFor('seat_stage'),
               child: KeyedSubtree(
                 key: debugKeyFor('横屏/座位舞台'),
                 child: _SeatStage(
@@ -554,10 +587,8 @@ class _LandscapeTable extends StatelessWidget {
                 ),
               ),
             ),
-            Positioned(
-              left: handLeft,
-              right: handRight,
-              bottom: compact ? 10 : 18,
+            _PositionedLayer(
+              rect: resolvedLayout.rectFor('hand_dock'),
               child: KeyedSubtree(
                 key: debugKeyFor('横屏/手牌区'),
                 child: _HandDock(
@@ -567,19 +598,15 @@ class _LandscapeTable extends StatelessWidget {
                 ),
               ),
             ),
-            Positioned(
-              right: actionRight,
-              bottom: actionBottom,
-              width: actionWidth,
+            _PositionedLayer(
+              rect: resolvedLayout.rectFor('action_column'),
               child: KeyedSubtree(
                 key: debugKeyFor('横屏/右侧操作栏'),
                 child: _ActionColumn(actions: actions, compact: compact),
               ),
             ),
-            Positioned(
-              left: utilityLeft,
-              bottom: utilityBottom,
-              width: compact ? 88 : 96,
+            _PositionedLayer(
+              rect: resolvedLayout.rectFor('utility_actions'),
               child: KeyedSubtree(
                 key: debugKeyFor('横屏/左下辅助操作'),
                 child: _UtilityActions(actions: actions),
@@ -588,6 +615,27 @@ class _LandscapeTable extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _PositionedLayer extends StatelessWidget {
+  const _PositionedLayer({
+    required this.rect,
+    required this.child,
+  });
+
+  final Rect rect;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      child: child,
     );
   }
 }

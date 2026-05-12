@@ -463,7 +463,7 @@ class _OnlineRoomPageState extends State<OnlineRoomPage> {
           icon: Icons.sort_rounded,
           placement: GameActionPlacement.secondary,
           enabled: true,
-          visible: true,
+          visible: false,
           onPressed: () => setState(() => _selectedCardIds.clear()),
         ),
         GameActionItem(

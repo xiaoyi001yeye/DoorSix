@@ -243,7 +243,7 @@ class _GameTablePageState extends State<GameTablePage> {
           icon: Icons.sort_rounded,
           placement: GameActionPlacement.secondary,
           enabled: true,
-          visible: true,
+          visible: false,
           onPressed: _sortMine,
         ),
         GameActionItem(

@@ -488,17 +488,17 @@ class _LandscapeTable extends StatelessWidget {
       builder: (context, constraints) {
         final compact =
             constraints.maxHeight < 430 || constraints.maxWidth < 900;
-        final actionWidth = compact ? 150.0 : 170.0;
+        final actionWidth = compact ? 132.0 : 148.0;
         final actionRight = compact ? 16.0 : 28.0;
-        final actionBottom = compact ? 34.0 : 38.0;
+        final actionBottom = compact ? 42.0 : 48.0;
         final handLeft = compact
             ? math.max(160.0, constraints.maxWidth * 0.28)
             : 230.0;
-        final handRight = compact ? actionWidth + actionRight + 40.0 : 280.0;
+        final handRight = compact ? actionWidth + actionRight + 40.0 : 252.0;
         final stageTop = compact ? 74.0 : 82.0;
         final stageBottom = compact ? 174.0 : 154.0;
         final utilityLeft = compact ? 86.0 : 132.0;
-        final utilityBottom = compact ? 56.0 : 66.0;
+        final utilityBottom = compact ? 58.0 : 78.0;
 
         return Stack(
           children: [
@@ -531,7 +531,11 @@ class _LandscapeTable extends StatelessWidget {
               bottom: compact ? 10 : 18,
               child: KeyedSubtree(
                 key: debugKeyFor('横屏/手牌区'),
-                child: _HandDock(state: state, compact: compact),
+                child: _HandDock(
+                  state: state,
+                  compact: compact,
+                  showStatus: false,
+                ),
               ),
             ),
             Positioned(
@@ -546,7 +550,7 @@ class _LandscapeTable extends StatelessWidget {
             Positioned(
               left: utilityLeft,
               bottom: utilityBottom,
-              width: compact ? 116 : 132,
+              width: compact ? 88 : 96,
               child: KeyedSubtree(
                 key: debugKeyFor('横屏/左下辅助操作'),
                 child: _UtilityActions(actions: actions),
@@ -1288,10 +1292,12 @@ class _HandDock extends StatelessWidget {
   const _HandDock({
     required this.state,
     this.compact = false,
+    this.showStatus = true,
   });
 
   final GameTableViewModel state;
   final bool compact;
+  final bool showStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -1302,10 +1308,14 @@ class _HandDock extends StatelessWidget {
             ? '${state.selectedCombo.label}${state.canPlay ? '，可以出' : '，压不过上家'}'
             : state.selectedCombo.label;
     return Container(
-      constraints: BoxConstraints(minHeight: compact ? 112 : 130),
+      constraints: BoxConstraints(
+        minHeight: showStatus
+            ? (compact ? 112 : 130)
+            : (compact ? 100 : 118),
+      ),
       padding: EdgeInsets.fromLTRB(
         compact ? 14 : 18,
-        compact ? 10 : 14,
+        showStatus ? (compact ? 10 : 14) : (compact ? 8 : 10),
         compact ? 14 : 18,
         compact ? 12 : 16,
       ),
@@ -1325,34 +1335,36 @@ class _HandDock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Text(
-                '我的手牌 ${state.hand.length}',
-                style: const TextStyle(
-                  color: Color(0xFF0C4380),
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  status,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: selectedCount == 0
-                        ? const Color(0xFF6D6B61)
-                        : state.canPlay
-                            ? const Color(0xFF247A37)
-                            : const Color(0xFFC84335),
-                    fontWeight: FontWeight.w800,
+          if (showStatus) ...[
+            Row(
+              children: [
+                Text(
+                  '我的手牌 ${state.hand.length}',
+                  style: const TextStyle(
+                    color: Color(0xFF0C4380),
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-              ),
-            ],
-          ),
-          SizedBox(height: compact ? 6 : 8),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    status,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: selectedCount == 0
+                          ? const Color(0xFF6D6B61)
+                          : state.canPlay
+                              ? const Color(0xFF247A37)
+                              : const Color(0xFFC84335),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: compact ? 6 : 8),
+          ],
           _V2HandScroller(
             cards: state.hand,
             onToggle: state.onToggleCard,
@@ -1464,6 +1476,7 @@ class _ActionColumn extends StatelessWidget {
     final buttons = actions
         .where((action) =>
             action.visible &&
+            action.kind != GameActionKind.sort &&
             (action.placement == GameActionPlacement.primary ||
                 action.placement == GameActionPlacement.secondary))
         .toList(growable: false);
@@ -1472,7 +1485,7 @@ class _ActionColumn extends StatelessWidget {
       children: [
         for (var index = 0; index < buttons.length; index += 1) ...[
           _ActionButton(action: buttons[index], compact: compact),
-          if (index != buttons.length - 1) SizedBox(height: compact ? 10 : 12),
+          if (index != buttons.length - 1) SizedBox(height: compact ? 8 : 10),
         ],
       ],
     );
@@ -1519,7 +1532,11 @@ class _UtilityActions extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final action in utility) _ActionButton(action: action, compact: true),
+        for (final action in utility)
+          _IconActionButton(
+            action: action,
+            size: action.kind == GameActionKind.hint ? 50 : 54,
+          ),
       ],
     );
   }
@@ -1544,7 +1561,7 @@ class _ActionButton extends StatelessWidget {
         icon: Icon(action.icon),
         label: Text(action.label, maxLines: 1, overflow: TextOverflow.ellipsis),
         style: FilledButton.styleFrom(
-          minimumSize: Size.fromHeight(compact ? 48 : 62),
+          minimumSize: Size.fromHeight(compact ? 46 : 54),
           backgroundColor: isPrimary
               ? const Color(0xFF2F8E2D)
               : const Color(0xFF2469AA),
@@ -1559,10 +1576,43 @@ class _ActionButton extends StatelessWidget {
             ),
           ),
           textStyle: TextStyle(
-            fontSize: compact ? 15 : 20,
+            fontSize: compact ? 15 : 18,
             fontWeight: FontWeight.w900,
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _IconActionButton extends StatelessWidget {
+  const _IconActionButton({
+    required this.action,
+    required this.size,
+  });
+
+  final GameActionItem action;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: action.enabled ? action.label : action.disabledReason ?? action.label,
+      child: FilledButton(
+        onPressed: action.enabled ? action.onPressed : null,
+        style: FilledButton.styleFrom(
+          minimumSize: Size.fromHeight(size),
+          backgroundColor: const Color(0xFF2469AA),
+          disabledBackgroundColor: const Color(0xFF7C827A),
+          foregroundColor: Colors.white,
+          disabledForegroundColor: Colors.white70,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFFD2B56F), width: 1.3),
+          ),
+          padding: EdgeInsets.zero,
+        ),
+        child: Icon(action.icon, size: 24),
       ),
     );
   }

@@ -201,6 +201,13 @@ class _GameTableShellState extends State<GameTableShell> {
   }
 
   _LayoutDebugReport _buildLayoutReport() {
+    final mediaQuery = MediaQuery.maybeOf(context);
+    final devicePixelRatio = mediaQuery?.devicePixelRatio ?? 1.0;
+    final screenLogicalSize = mediaQuery?.size ?? Size.zero;
+    final screenPhysicalSize = Size(
+      screenLogicalSize.width * devicePixelRatio,
+      screenLogicalSize.height * devicePixelRatio,
+    );
     final rootObject = _rootKey.currentContext?.findRenderObject();
     final rootBox = rootObject is RenderBox ? rootObject : null;
     final rootSize = rootBox?.size ?? Size.zero;
@@ -224,6 +231,9 @@ class _GameTableShellState extends State<GameTableShell> {
 
     return _LayoutDebugReport(
       capturedAt: DateTime.now(),
+      devicePixelRatio: devicePixelRatio,
+      screenPhysicalSize: screenPhysicalSize,
+      screenLogicalSize: screenLogicalSize,
       rootSize: rootSize,
       entries: entries,
     );
@@ -233,17 +243,28 @@ class _GameTableShellState extends State<GameTableShell> {
 class _LayoutDebugReport {
   const _LayoutDebugReport({
     required this.capturedAt,
+    required this.devicePixelRatio,
+    required this.screenPhysicalSize,
+    required this.screenLogicalSize,
     required this.rootSize,
     required this.entries,
   });
 
   final DateTime capturedAt;
+  final double devicePixelRatio;
+  final Size screenPhysicalSize;
+  final Size screenLogicalSize;
   final Size rootSize;
   final List<_LayoutDebugEntry> entries;
 
   String toClipboardText() {
     final lines = <String>[
       '牌桌布局日志',
+      'devicePixelRatio: ${devicePixelRatio.toStringAsFixed(1)}',
+      'screen physical: ${screenPhysicalSize.width.toStringAsFixed(0)} x '
+          '${screenPhysicalSize.height.toStringAsFixed(0)}',
+      'screen logical: ${screenLogicalSize.width.toStringAsFixed(1)} x '
+          '${screenLogicalSize.height.toStringAsFixed(1)}',
       'root: ${rootSize.width.toStringAsFixed(1)} x '
           '${rootSize.height.toStringAsFixed(1)}',
       'captured: ${_formatTime(capturedAt)}',
@@ -389,6 +410,14 @@ class _LayoutLogSheet extends StatelessWidget {
                     _LayoutLogBlock(
                       title: '根容器',
                       lines: [
+                        'devicePixelRatio='
+                            '${report.devicePixelRatio.toStringAsFixed(1)}',
+                        'screen physical='
+                            '${report.screenPhysicalSize.width.toStringAsFixed(0)} x '
+                            '${report.screenPhysicalSize.height.toStringAsFixed(0)}',
+                        'screen logical='
+                            '${report.screenLogicalSize.width.toStringAsFixed(1)} x '
+                            '${report.screenLogicalSize.height.toStringAsFixed(1)}',
                         'size=${rootSize.width.toStringAsFixed(1)} x '
                             '${rootSize.height.toStringAsFixed(1)}',
                         'captured=${_formatTime(report.capturedAt)}',

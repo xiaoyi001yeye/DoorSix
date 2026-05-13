@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -703,7 +704,8 @@ class _GameTopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 700;
+        final compact =
+            constraints.maxWidth < 700 || constraints.maxHeight < 78;
         final topActions = actions
             .where((action) =>
                 action.visible &&
@@ -732,6 +734,7 @@ class _GameTopBar extends StatelessWidget {
             _RoundIconButton(
               tooltip: '返回',
               icon: Icons.arrow_back_rounded,
+              tone: _RoundButtonTone.blue,
               onPressed: _firstAction(GameActionKind.back)?.onPressed,
             ),
             const SizedBox(width: 8),
@@ -806,6 +809,8 @@ class _GameTopBar extends StatelessWidget {
               _RoundIconButton(
                 tooltip: action.label,
                 icon: action.icon,
+                tone: _RoundButtonTone.light,
+                caption: compact ? null : action.label,
                 onPressed: action.enabled ? action.onPressed : null,
               ),
               const SizedBox(width: 8),
@@ -1694,34 +1699,271 @@ class _IconActionButton extends StatelessWidget {
   }
 }
 
-class _RoundIconButton extends StatelessWidget {
+enum _RoundButtonTone {
+  blue,
+  light,
+}
+
+class _RoundButtonAtlas {
+  const _RoundButtonAtlas._();
+
+  static const assetPath =
+      'assets/images/table_skin/function_round_buttons_atlas.png';
+  static const _spriteSize = 238.0;
+  static const _centerX = [170.0, 483.0, 796.0, 1109.0];
+  static const _centerY = [210.0, 586.0];
+
+  static Rect sourceRect({
+    required _RoundButtonTone tone,
+    required int stateIndex,
+  }) {
+    final row = tone == _RoundButtonTone.blue ? 0 : 1;
+    final center = Offset(_centerX[stateIndex], _centerY[row]);
+    return Rect.fromCenter(
+      center: center,
+      width: _spriteSize,
+      height: _spriteSize,
+    );
+  }
+}
+
+class _AtlasSpriteImage extends StatefulWidget {
+  const _AtlasSpriteImage({
+    required this.assetPath,
+    required this.sourceRect,
+  });
+
+  final String assetPath;
+  final Rect sourceRect;
+
+  @override
+  State<_AtlasSpriteImage> createState() => _AtlasSpriteImageState();
+}
+
+class _AtlasSpriteImageState extends State<_AtlasSpriteImage> {
+  ImageStream? _imageStream;
+  ImageStreamListener? _imageStreamListener;
+  ui.Image? _image;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolveImage();
+  }
+
+  @override
+  void didUpdateWidget(_AtlasSpriteImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.assetPath != oldWidget.assetPath) {
+      _resolveImage();
+    }
+  }
+
+  @override
+  void dispose() {
+    final listener = _imageStreamListener;
+    if (listener != null) {
+      _imageStream?.removeListener(listener);
+    }
+    super.dispose();
+  }
+
+  void _resolveImage() {
+    final oldListener = _imageStreamListener;
+    if (oldListener != null) {
+      _imageStream?.removeListener(oldListener);
+    }
+
+    final imageProvider = AssetImage(widget.assetPath);
+    final stream = imageProvider.resolve(createLocalImageConfiguration(context));
+    final listener = ImageStreamListener((imageInfo, synchronousCall) {
+      if (!mounted) {
+        return;
+      }
+      if (synchronousCall) {
+        _image = imageInfo.image;
+        return;
+      }
+      setState(() {
+        _image = imageInfo.image;
+      });
+    });
+
+    _imageStream = stream;
+    _imageStreamListener = listener;
+    stream.addListener(listener);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final image = _image;
+    if (image == null) {
+      return const SizedBox.expand();
+    }
+    return RawImage(
+      image: image,
+      rect: widget.sourceRect,
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.high,
+    );
+  }
+}
+
+class _RoundIconButton extends StatefulWidget {
   const _RoundIconButton({
     required this.tooltip,
     required this.icon,
     required this.onPressed,
+    this.tone = _RoundButtonTone.light,
+    this.caption,
   });
 
   final String tooltip;
   final IconData icon;
   final VoidCallback? onPressed;
+  final _RoundButtonTone tone;
+  final String? caption;
+
+  @override
+  State<_RoundIconButton> createState() => _RoundIconButtonState();
+}
+
+class _RoundIconButtonState extends State<_RoundIconButton> {
+  static const _buttonSize = 54.0;
+
+  bool _pressed = false;
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: IconButton.filled(
-        onPressed: onPressed,
-        icon: Icon(icon),
-        style: IconButton.styleFrom(
-          backgroundColor: const Color(0xFFF7F0D5),
-          foregroundColor: const Color(0xFF0C4380),
-          disabledBackgroundColor: const Color(0xFFD8D0B7),
-          disabledForegroundColor: const Color(0xFF6C6C6C),
-          side: const BorderSide(color: Color(0xFFD2B56F), width: 1.4),
-          minimumSize: const Size(54, 54),
+    final enabled = widget.onPressed != null;
+    final stateIndex = !enabled
+        ? 2
+        : _pressed
+            ? 1
+            : _hovered
+                ? 3
+                : 0;
+    final iconColor = _iconColor(enabled);
+    final iconSize = widget.tone == _RoundButtonTone.blue ? 30.0 : 28.0;
+    final button = Tooltip(
+      message: widget.tooltip,
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: widget.tooltip,
+        child: MouseRegion(
+          cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+          onExit: enabled ? (_) => setState(() => _hovered = false) : null,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: enabled ? widget.onPressed : null,
+            onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+            onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+            onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 90),
+              curve: Curves.easeOut,
+              scale: _pressed ? 0.96 : 1,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                curve: Curves.easeOut,
+                width: _buttonSize,
+                height: _buttonSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                        alpha: enabled ? 0.18 : 0.08,
+                      ),
+                      blurRadius: _pressed ? 5 : 10,
+                      offset: Offset(0, _pressed ? 2 : 5),
+                    ),
+                    if (_hovered && enabled)
+                      BoxShadow(
+                        color: const Color(0xFFFFD35E).withValues(alpha: 0.35),
+                        blurRadius: 14,
+                      ),
+                  ],
+                ),
+                child: ClipOval(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _AtlasSpriteImage(
+                        assetPath: _RoundButtonAtlas.assetPath,
+                        sourceRect: _RoundButtonAtlas.sourceRect(
+                          tone: widget.tone,
+                          stateIndex: stateIndex,
+                        ),
+                      ),
+                      if (!enabled)
+                        ColoredBox(
+                          color: Colors.black.withValues(alpha: 0.08),
+                        ),
+                      Center(
+                        child: Icon(
+                          widget.icon,
+                          color: iconColor,
+                          size: iconSize,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.18),
+                              blurRadius: 3,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
+
+    final caption = widget.caption;
+    if (caption == null) {
+      return button;
+    }
+
+    return SizedBox(
+      width: 62,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          button,
+          const SizedBox(height: 2),
+          Text(
+            caption,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF0C4380),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _iconColor(bool enabled) {
+    if (!enabled) {
+      return widget.tone == _RoundButtonTone.blue
+          ? Colors.white70
+          : const Color(0xFF6D7683);
+    }
+    return widget.tone == _RoundButtonTone.blue
+        ? Colors.white
+        : const Color(0xFF0C4380);
   }
 }
 

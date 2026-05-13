@@ -27,6 +27,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/images/table_skin/
     - assets/sound/
     - assets/config/rules/
     - assets/config/table_layouts/

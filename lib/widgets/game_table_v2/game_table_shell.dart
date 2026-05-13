@@ -1800,12 +1800,40 @@ class _AtlasSpriteImageState extends State<_AtlasSpriteImage> {
     if (image == null) {
       return const SizedBox.expand();
     }
-    return RawImage(
-      image: image,
-      rect: widget.sourceRect,
-      fit: BoxFit.cover,
-      filterQuality: FilterQuality.high,
+    return CustomPaint(
+      painter: _AtlasSpritePainter(
+        image: image,
+        sourceRect: widget.sourceRect,
+      ),
+      size: Size.infinite,
     );
+  }
+}
+
+class _AtlasSpritePainter extends CustomPainter {
+  const _AtlasSpritePainter({
+    required this.image,
+    required this.sourceRect,
+  });
+
+  final ui.Image image;
+  final Rect sourceRect;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawImageRect(
+      image,
+      sourceRect,
+      Offset.zero & size,
+      Paint()
+        ..filterQuality = FilterQuality.high
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_AtlasSpritePainter oldDelegate) {
+    return oldDelegate.image != image || oldDelegate.sourceRect != sourceRect;
   }
 }
 

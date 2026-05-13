@@ -712,13 +712,7 @@ class _GameTopBar extends StatelessWidget {
                 action.placement == GameActionPlacement.topBar &&
                 action.kind != GameActionKind.back)
             .toList(growable: false);
-        final visibleTopActions = compact
-            ? topActions
-                .where((action) =>
-                    action.kind == GameActionKind.settings ||
-                    action.kind == GameActionKind.layoutLog)
-                .toList(growable: false)
-            : topActions;
+        final showActionCaptions = !compact;
         final roomText =
             state.roomCode == null ? '练习桌' : '房间 ${state.roomCode}';
         final connectionText = compact
@@ -805,12 +799,12 @@ class _GameTopBar extends StatelessWidget {
               _TimerBadge(seconds: state.turnSecondsRemaining!),
             ],
             const SizedBox(width: 10),
-            for (final action in visibleTopActions) ...[
+            for (final action in topActions) ...[
               _RoundIconButton(
                 tooltip: action.label,
                 icon: action.icon,
                 tone: _RoundButtonTone.light,
-                caption: compact ? null : action.label,
+                caption: showActionCaptions ? action.label : null,
                 onPressed: action.enabled ? action.onPressed : null,
               ),
               const SizedBox(width: 8),
@@ -1614,11 +1608,146 @@ class _UtilityActions extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final action in utility)
-          _IconActionButton(
-            action: action,
-            size: action.kind == GameActionKind.hint ? 50 : 54,
-          ),
+          action.kind == GameActionKind.hint
+              ? _HintActionButton(action: action)
+              : _IconActionButton(action: action, size: 54),
       ],
+    );
+  }
+}
+
+class _HintButtonAtlas {
+  const _HintButtonAtlas._();
+
+  static const assetPath = 'assets/images/table_skin/hint_button_atlas.png';
+  static const _spriteSize = Size(386, 156);
+  static const _stateCenters = [
+    Offset(218, 291),
+    Offset(626, 291),
+    Offset(1034, 291),
+    Offset(218, 629),
+    Offset(626, 629),
+  ];
+
+  static Rect sourceRect(int stateIndex) {
+    final center = _stateCenters[stateIndex];
+    return Rect.fromCenter(
+      center: center,
+      width: _spriteSize.width,
+      height: _spriteSize.height,
+    );
+  }
+}
+
+class _HintActionButton extends StatefulWidget {
+  const _HintActionButton({required this.action});
+
+  final GameActionItem action;
+
+  @override
+  State<_HintActionButton> createState() => _HintActionButtonState();
+}
+
+class _HintActionButtonState extends State<_HintActionButton> {
+  bool _pressed = false;
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final action = widget.action;
+    final enabled = action.enabled && action.onPressed != null;
+    final stateIndex = !enabled
+        ? 2
+        : _pressed
+            ? 1
+            : _hovered
+                ? 3
+                : 0;
+    final foregroundColor = enabled ? Colors.white : Colors.white70;
+
+    return Tooltip(
+      message: enabled ? action.label : action.disabledReason ?? action.label,
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: action.label,
+        child: MouseRegion(
+          cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+          onExit: enabled ? (_) => setState(() => _hovered = false) : null,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: enabled ? action.onPressed : null,
+            onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+            onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+            onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 90),
+              curve: Curves.easeOut,
+              scale: _pressed ? 0.97 : 1,
+              child: SizedBox(
+                width: 154,
+                height: 58,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  fit: StackFit.expand,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(29),
+                      child: _AtlasSpriteImage(
+                        assetPath: _HintButtonAtlas.assetPath,
+                        sourceRect: _HintButtonAtlas.sourceRect(stateIndex),
+                      ),
+                    ),
+                    if (!enabled)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(29),
+                        child: ColoredBox(
+                          color: Colors.black.withValues(alpha: 0.04),
+                        ),
+                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.lightbulb_outline_rounded,
+                          color: foregroundColor,
+                          size: 25,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.22),
+                              blurRadius: 3,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 9),
+                        Text(
+                          action.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: foregroundColor,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withValues(alpha: 0.24),
+                                blurRadius: 3,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

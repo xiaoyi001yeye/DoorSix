@@ -1537,18 +1537,15 @@ class _HandDock extends StatelessWidget {
         : state.selectedCombo.isValid
             ? '${state.selectedCombo.label}${state.canPlay ? '，可以出' : '，压不过上家'}'
             : state.selectedCombo.label;
+    final horizontalPadding = compact ? 14.0 : 18.0;
+    final statusTop = compact ? 10.0 : 14.0;
     return Container(
       constraints: BoxConstraints(
         minHeight: showStatus
             ? (compact ? 112 : 130)
             : (compact ? 100 : 118),
       ),
-      padding: EdgeInsets.fromLTRB(
-        compact ? 14 : 18,
-        showStatus ? (compact ? 10 : 14) : (compact ? 8 : 10),
-        compact ? 14 : 18,
-        compact ? 12 : 16,
-      ),
+      clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(compact ? 22 : 26),
@@ -1561,45 +1558,51 @@ class _HandDock extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
         children: [
-          if (showStatus) ...[
-            Row(
-              children: [
-                Text(
-                  '我的手牌 ${state.hand.length}',
-                  style: const TextStyle(
-                    color: Color(0xFF0C4380),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    status,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: selectedCount == 0
-                          ? const Color(0xFF6D6B61)
-                          : state.canPlay
-                              ? const Color(0xFF247A37)
-                              : const Color(0xFFC84335),
-                      fontWeight: FontWeight.w800,
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+              child: _V2HandScroller(
+                cards: state.hand,
+                onToggle: state.onToggleCard,
+                compact: compact,
+              ),
+            ),
+          ),
+          if (showStatus)
+            Positioned(
+              left: horizontalPadding,
+              right: horizontalPadding,
+              top: statusTop,
+              child: Row(
+                children: [
+                  Text(
+                    '我的手牌 ${state.hand.length}',
+                    style: const TextStyle(
+                      color: Color(0xFF0C4380),
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      status,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: selectedCount == 0
+                            ? const Color(0xFF6D6B61)
+                            : state.canPlay
+                                ? const Color(0xFF247A37)
+                                : const Color(0xFFC84335),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            SizedBox(height: compact ? 6 : 8),
-          ],
-          _V2HandScroller(
-            cards: state.hand,
-            onToggle: state.onToggleCard,
-            compact: compact,
-          ),
         ],
       ),
     );
@@ -1620,13 +1623,10 @@ class _V2HandScroller extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (cards.isEmpty) {
-      return SizedBox(
-        height: compact ? 72 : 86,
-        child: const Center(
-          child: Text(
-            '手牌已出完',
-            style: TextStyle(color: Color(0xFF6D6B61)),
-          ),
+      return const Center(
+        child: Text(
+          '手牌已出完',
+          style: TextStyle(color: Color(0xFF6D6B61)),
         ),
       );
     }
@@ -1638,46 +1638,56 @@ class _V2HandScroller extends StatelessWidget {
     final minStep = (compact ? 24.0 : 30.0) * scale;
     final preferredStep = (compact ? 36.0 : 48.0) * scale;
 
-    return SizedBox(
-      height: cardHeight + selectedLift,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final fittedStep = cards.length <= 1
-              ? preferredStep
-              : (constraints.maxWidth - cardWidth) / (cards.length - 1);
-          final step = math.max(minStep, math.min(preferredStep, fittedStep));
-          final stackWidth = math.max(
-            constraints.maxWidth,
-            cardWidth + step * (cards.length - 1),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : cardWidth + preferredStep * (cards.length - 1);
+        final availableHeight =
+            constraints.maxHeight.isFinite && constraints.maxHeight > 0
+            ? constraints.maxHeight
+            : cardHeight + selectedLift;
+        const handBaselineRatio = 0.95;
+        final cardBottom = availableHeight * handBaselineRatio;
+        final normalTop = cardBottom - cardHeight;
+        final selectedTop = normalTop - selectedLift;
+        final fittedStep = cards.length <= 1
+            ? preferredStep
+            : (availableWidth - cardWidth) / (cards.length - 1);
+        final step = math.max(minStep, math.min(preferredStep, fittedStep));
+        final stackWidth = math.max(
+          availableWidth,
+          cardWidth + step * (cards.length - 1),
+        );
+
+        Widget positionedCard(int index) {
+          final card = cards[index];
+          return AnimatedPositioned(
+            key: ValueKey(card.id),
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOut,
+            left: index * step,
+            top: card.selected ? selectedTop : normalTop,
+            child: HandCard(
+              card: card,
+              onTap: () => onToggle(card.id),
+              width: cardWidth,
+              height: cardHeight,
+              trailingMargin: 0,
+              showSelectionOffset: false,
+            ),
           );
+        }
 
-          Widget positionedCard(int index) {
-            final card = cards[index];
-            return AnimatedPositioned(
-              key: ValueKey(card.id),
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOut,
-              left: index * step,
-              top: card.selected ? 0 : selectedLift,
-              child: HandCard(
-                card: card,
-                onTap: () => onToggle(card.id),
-                width: cardWidth,
-                height: cardHeight,
-                trailingMargin: 0,
-                showSelectionOffset: false,
-              ),
-            );
-          }
-
-          return SingleChildScrollView(
+        return ClipRect(
+          child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             child: SizedBox(
               width: stackWidth,
-              height: cardHeight + selectedLift,
+              height: availableHeight,
               child: Stack(
-                clipBehavior: Clip.none,
+                clipBehavior: Clip.hardEdge,
                 children: [
                   for (var index = 0; index < cards.length; index += 1)
                     if (!cards[index].selected) positionedCard(index),
@@ -1686,9 +1696,9 @@ class _V2HandScroller extends StatelessWidget {
                 ],
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

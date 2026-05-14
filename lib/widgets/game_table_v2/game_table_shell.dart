@@ -24,6 +24,7 @@ enum GameActionKind {
   replay,
   refresh,
   settings,
+  bucketGrid,
   layoutLog,
 }
 
@@ -135,6 +136,7 @@ class _GameTableShellState extends State<GameTableShell> {
   final Map<String, GlobalKey> _debugKeys = {};
   GameTableLayoutConfig _layoutConfig = GameTableLayoutConfig.fallback;
   String? _layoutConfigError;
+  bool _showBucketGrid = true;
 
   GlobalKey _debugKeyFor(String name) {
     return _debugKeys.putIfAbsent(name, () => GlobalKey(debugLabel: name));
@@ -188,6 +190,7 @@ class _GameTableShellState extends State<GameTableShell> {
           child: Stack(
             children: [
               const _InkWashBackdrop(),
+              if (_showBucketGrid) const _BucketGridOverlay(),
               SafeArea(
                 top: false,
                 bottom: false,
@@ -215,6 +218,15 @@ class _GameTableShellState extends State<GameTableShell> {
     return [
       ...widget.actions,
       GameActionItem(
+        kind: GameActionKind.bucketGrid,
+        label: _showBucketGrid ? '隐藏网格' : '显示网格',
+        icon: _showBucketGrid ? Icons.grid_off : Icons.grid_on,
+        placement: GameActionPlacement.topBar,
+        enabled: true,
+        visible: true,
+        onPressed: _toggleBucketGrid,
+      ),
+      GameActionItem(
         kind: GameActionKind.layoutLog,
         label: '布局日志',
         icon: Icons.bug_report_outlined,
@@ -224,6 +236,12 @@ class _GameTableShellState extends State<GameTableShell> {
         onPressed: _showLayoutLog,
       ),
     ];
+  }
+
+  void _toggleBucketGrid() {
+    setState(() {
+      _showBucketGrid = !_showBucketGrid;
+    });
   }
 
   void _showLayoutLog() {
@@ -2372,6 +2390,99 @@ class _InkWashBackdrop extends StatelessWidget {
         child: SizedBox.expand(),
       ),
     );
+  }
+}
+
+class _BucketGridOverlay extends StatelessWidget {
+  const _BucketGridOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return const IgnorePointer(
+      child: CustomPaint(
+        painter: _BucketGridPainter(grid: _debugBucketGrid),
+        child: SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _BucketGridPainter extends CustomPainter {
+  const _BucketGridPainter({required this.grid});
+
+  final BucketGrid grid;
+
+  static const _lineColor = Color(0x8FD6D6D6);
+  static const _majorLineColor = Color(0x9FA9E2AD);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+
+    final minorPaint = Paint()
+      ..color = _lineColor
+      ..strokeWidth = 0.65
+      ..style = PaintingStyle.stroke;
+    final majorPaint = Paint()
+      ..color = _majorLineColor
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+    final bucketWidth = size.width / grid.columns;
+    final bucketHeight = size.height / grid.rows;
+
+    for (var column = 0; column <= grid.columns; column += 1) {
+      final x = column * bucketWidth;
+      _drawDashedLine(
+        canvas,
+        Offset(x, 0),
+        Offset(x, size.height),
+        column % 10 == 0 ? majorPaint : minorPaint,
+      );
+    }
+
+    for (var row = 0; row <= grid.rows; row += 1) {
+      final y = row * bucketHeight;
+      _drawDashedLine(
+        canvas,
+        Offset(0, y),
+        Offset(size.width, y),
+        row % 10 == 0 ? majorPaint : minorPaint,
+      );
+    }
+  }
+
+  void _drawDashedLine(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+  ) {
+    const dashLength = 4.0;
+    const gapLength = 4.0;
+    final delta = end - start;
+    final distance = delta.distance;
+    if (distance == 0) {
+      return;
+    }
+    final direction = delta / distance;
+    var current = 0.0;
+    while (current < distance) {
+      final dashEnd = math.min(current + dashLength, distance);
+      canvas.drawLine(
+        start + direction * current,
+        start + direction * dashEnd,
+        paint,
+      );
+      current += dashLength + gapLength;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BucketGridPainter oldDelegate) {
+    return oldDelegate.grid.columns != grid.columns ||
+        oldDelegate.grid.rows != grid.rows;
   }
 }
 

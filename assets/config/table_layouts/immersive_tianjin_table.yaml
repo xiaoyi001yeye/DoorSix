@@ -217,18 +217,18 @@ layers:
       regular:
         bucketPosition:
           mode: bucket
-          x: 12.8
-          y: 84.9
+          x: 23.0
+          y: 70.0
           width: 73.2
-          height: 13.1
+          height: 28.0
           anchor: topLeft
       compact:
         bucketPosition:
           mode: bucket
-          x: 28.0
-          y: 73.8
+          x: 23.0
+          y: 69.6
           width: 51.9
-          height: 23.8
+          height: 28.0
           anchor: topLeft
 
   - id: action_column

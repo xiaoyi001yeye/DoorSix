@@ -2,7 +2,7 @@ name: door_six
 description: "A Flutter prototype for the Tianjin six-player card game Zha Liu Jia."
 publish_to: 'none'
 
-version: 0.1.15+16
+version: 0.1.16+17
 
 environment:
   sdk: ^3.11.0

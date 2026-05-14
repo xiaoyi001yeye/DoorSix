@@ -1686,14 +1686,14 @@ class _HintActionButtonState extends State<_HintActionButton> {
               curve: Curves.easeOut,
               scale: _pressed ? 0.97 : 1,
               child: SizedBox(
-                width: 154,
-                height: 58,
+                width: 77,
+                height: 29,
                 child: Stack(
                   clipBehavior: Clip.none,
                   fit: StackFit.expand,
                   children: [
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(29),
+                      borderRadius: BorderRadius.circular(15),
                       child: _AtlasSpriteImage(
                         assetPath: _HintButtonAtlas.assetPath,
                         sourceRect: _HintButtonAtlas.sourceRect(stateIndex),
@@ -1701,46 +1701,38 @@ class _HintActionButtonState extends State<_HintActionButton> {
                     ),
                     if (!enabled)
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(29),
+                        borderRadius: BorderRadius.circular(15),
                         child: ColoredBox(
                           color: Colors.black.withValues(alpha: 0.04),
                         ),
                       ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.lightbulb_outline_rounded,
-                          color: foregroundColor,
-                          size: 25,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withValues(alpha: 0.22),
-                              blurRadius: 3,
-                              offset: const Offset(0, 1),
+                    Center(
+                      child: Icon(
+                        Icons.lightbulb_outline_rounded,
+                        color: foregroundColor,
+                        size: 18,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black.withValues(alpha: 0.22),
+                            blurRadius: 3,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_hovered && enabled)
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(15),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFFD35E)
+                                  .withValues(alpha: 0.22),
+                              blurRadius: 10,
                             ),
                           ],
                         ),
-                        const SizedBox(width: 9),
-                        Text(
-                          action.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: foregroundColor,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.24),
-                                blurRadius: 3,
-                                offset: const Offset(0, 1),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
                   ],
                 ),
               ),

@@ -217,7 +217,7 @@ layers:
       regular:
         bucketPosition:
           mode: bucket
-          x: 23.0
+          x: 19.0
           y: 70.0
           width: 73.2
           height: 28.0
@@ -225,7 +225,7 @@ layers:
       compact:
         bucketPosition:
           mode: bucket
-          x: 23.0
+          x: 19.0
           y: 69.6
           width: 51.9
           height: 28.0

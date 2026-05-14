@@ -1630,11 +1630,12 @@ class _V2HandScroller extends StatelessWidget {
       );
     }
 
-    final cardWidth = compact ? 52.0 : 68.0;
-    final cardHeight = compact ? 75.0 : 98.0;
-    final selectedLift = compact ? 12.0 : 18.0;
-    final minStep = compact ? 24.0 : 30.0;
-    final preferredStep = compact ? 36.0 : 48.0;
+    final scale = CardDisplaySettingsScope.of(context).scale;
+    final cardWidth = (compact ? 52.0 : 68.0) * scale;
+    final cardHeight = (compact ? 75.0 : 98.0) * scale;
+    final selectedLift = (compact ? 12.0 : 18.0) * scale;
+    final minStep = (compact ? 24.0 : 30.0) * scale;
+    final preferredStep = (compact ? 36.0 : 48.0) * scale;
 
     return SizedBox(
       height: cardHeight + selectedLift,
@@ -2413,7 +2414,7 @@ class _BucketGridPainter extends CustomPainter {
   final BucketGrid grid;
 
   static const _lineColor = Color(0x8FD6D6D6);
-  static const _majorLineColor = Color(0x9FA9E2AD);
+  static const _majorLineColor = Color(0xCC2E7D32);
 
   @override
   void paint(Canvas canvas, Size size) {

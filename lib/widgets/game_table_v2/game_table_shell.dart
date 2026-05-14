@@ -114,6 +114,8 @@ class GameTableViewModel {
 
 typedef _LayoutDebugKeyProvider = GlobalKey Function(String name);
 
+const BucketGrid _debugBucketGrid = BucketGrid(columns: 100, rows: 100);
+
 class GameTableShell extends StatefulWidget {
   const GameTableShell({
     required this.state,
@@ -246,6 +248,7 @@ class _GameTableShellState extends State<GameTableShell> {
     final rootBox = rootObject is RenderBox ? rootObject : null;
     final rootSize = rootBox?.size ?? Size.zero;
     final rootOrigin = rootBox?.localToGlobal(Offset.zero) ?? Offset.zero;
+    final capturedRects = <String, Rect>{};
     final entries = <_LayoutDebugEntry>[];
 
     for (final item in _debugKeys.entries) {
@@ -254,11 +257,19 @@ class _GameTableShellState extends State<GameTableShell> {
         continue;
       }
       final offset = renderObject.localToGlobal(Offset.zero) - rootOrigin;
+      capturedRects[item.key] = offset & renderObject.size;
+    }
+
+    for (final item in capturedRects.entries) {
+      final parentName = _layoutDebugParentName(item.key, capturedRects);
       entries.add(
         _LayoutDebugEntry(
           name: item.key,
-          rect: offset & renderObject.size,
+          rect: item.value,
           rootSize: rootSize,
+          bucketGrid: _debugBucketGrid,
+          parentName: parentName,
+          parentRect: parentName == null ? null : capturedRects[parentName],
         ),
       );
     }
@@ -273,6 +284,19 @@ class _GameTableShellState extends State<GameTableShell> {
       rootSize: rootSize,
       entries: entries,
     );
+  }
+
+  String? _layoutDebugParentName(String name, Map<String, Rect> rects) {
+    if (name != '中央出牌区' && !name.startsWith('座位')) {
+      return null;
+    }
+    if (rects.containsKey('横屏/座位舞台')) {
+      return '横屏/座位舞台';
+    }
+    if (rects.containsKey('竖屏/座位舞台')) {
+      return '竖屏/座位舞台';
+    }
+    return null;
   }
 }
 
@@ -309,29 +333,33 @@ class _LayoutDebugReport {
           '${screenLogicalSize.height.toStringAsFixed(1)}',
       'root: ${rootSize.width.toStringAsFixed(1)} x '
           '${rootSize.height.toStringAsFixed(1)}',
+      'bucket grid: ${_debugBucketGrid.columns} x ${_debugBucketGrid.rows}',
       'captured: ${_formatTime(capturedAt)}',
       '',
     ];
 
     for (final entry in entries) {
-      lines
-        ..add('[${entry.name}]')
-        ..add(
-          'position: left ${entry.rect.left.toStringAsFixed(1)} '
-          '(${_pct(entry.leftRatio)}), top '
-          '${entry.rect.top.toStringAsFixed(1)} (${_pct(entry.topRatio)})',
-        )
-        ..add(
-          'size: ${entry.rect.width.toStringAsFixed(1)} x '
-          '${entry.rect.height.toStringAsFixed(1)} '
-          '(${_pct(entry.widthRatio)} x ${_pct(entry.heightRatio)})',
-        )
-        ..add(
-          'center: ${entry.rect.center.dx.toStringAsFixed(1)}, '
-          '${entry.rect.center.dy.toStringAsFixed(1)}',
-        )
-        ..add('raw: ${entry.summary}')
-        ..add('');
+      lines.add('[${entry.name}]');
+      lines.add('bucket: ${entry.bucketSummary}');
+      if (entry.parentBucketSummary != null) {
+        lines.add('parent bucket: ${entry.parentBucketSummary}');
+      }
+      lines.add(
+        'position: left ${entry.rect.left.toStringAsFixed(1)} '
+        '(${_pct(entry.leftRatio)}), top '
+        '${entry.rect.top.toStringAsFixed(1)} (${_pct(entry.topRatio)})',
+      );
+      lines.add(
+        'size: ${entry.rect.width.toStringAsFixed(1)} x '
+        '${entry.rect.height.toStringAsFixed(1)} '
+        '(${_pct(entry.widthRatio)} x ${_pct(entry.heightRatio)})',
+      );
+      lines.add(
+        'center: ${entry.rect.center.dx.toStringAsFixed(1)}, '
+        '${entry.rect.center.dy.toStringAsFixed(1)}',
+      );
+      lines.add('raw: ${entry.summary}');
+      lines.add('');
     }
 
     return lines.join('\n').trimRight();
@@ -343,11 +371,17 @@ class _LayoutDebugEntry {
     required this.name,
     required this.rect,
     required this.rootSize,
+    required this.bucketGrid,
+    required this.parentName,
+    required this.parentRect,
   });
 
   final String name;
   final Rect rect;
   final Size rootSize;
+  final BucketGrid bucketGrid;
+  final String? parentName;
+  final Rect? parentRect;
 
   double get widthRatio {
     return rootSize.width == 0 ? 0 : rect.width / rootSize.width;
@@ -360,9 +394,53 @@ class _LayoutDebugEntry {
 
   double get topRatio => rootSize.height == 0 ? 0 : rect.top / rootSize.height;
 
+  double get bucketX => rootSize.width == 0
+      ? 0
+      : rect.left / rootSize.width * bucketGrid.columns;
+
+  double get bucketY => rootSize.height == 0
+      ? 0
+      : rect.top / rootSize.height * bucketGrid.rows;
+
+  double get bucketWidth => rootSize.width == 0
+      ? 0
+      : rect.width / rootSize.width * bucketGrid.columns;
+
+  double get bucketHeight => rootSize.height == 0
+      ? 0
+      : rect.height / rootSize.height * bucketGrid.rows;
+
+  String get bucketSummary {
+    return 'grid ${bucketGrid.columns}x${bucketGrid.rows} | '
+        'x=${_bucket(bucketX)}, y=${_bucket(bucketY)}, '
+        'w=${_bucket(bucketWidth)}, h=${_bucket(bucketHeight)}';
+  }
+
+  String? get parentBucketSummary {
+    final parent = parentRect;
+    if (parent == null || parent.width == 0 || parent.height == 0) {
+      return null;
+    }
+    final parentBucketX =
+        (rect.left - parent.left) / parent.width * bucketGrid.columns;
+    final parentBucketY =
+        (rect.top - parent.top) / parent.height * bucketGrid.rows;
+    final parentBucketWidth = rect.width / parent.width * bucketGrid.columns;
+    final parentBucketHeight = rect.height / parent.height * bucketGrid.rows;
+    return '$parentName grid ${bucketGrid.columns}x${bucketGrid.rows} | '
+        'x=${_bucket(parentBucketX)}, y=${_bucket(parentBucketY)}, '
+        'w=${_bucket(parentBucketWidth)}, '
+        'h=${_bucket(parentBucketHeight)}';
+  }
+
   String get summary {
     return [
       name,
+      'bucket x=${_bucket(bucketX)}',
+      'bucket y=${_bucket(bucketY)}',
+      'bucket w=${_bucket(bucketWidth)}',
+      'bucket h=${_bucket(bucketHeight)}',
+      if (parentBucketSummary != null) 'parent bucket=$parentBucketSummary',
       'x=${rect.left.toStringAsFixed(1)} (${_pct(leftRatio)})',
       'y=${rect.top.toStringAsFixed(1)} (${_pct(topRatio)})',
       'w=${rect.width.toStringAsFixed(1)} (${_pct(widthRatio)})',
@@ -465,6 +543,8 @@ class _LayoutLogSheet extends StatelessWidget {
                             '${report.screenLogicalSize.height.toStringAsFixed(1)}',
                         'size=${rootSize.width.toStringAsFixed(1)} x '
                             '${rootSize.height.toStringAsFixed(1)}',
+                        'bucket grid=${_debugBucketGrid.columns} x '
+                            '${_debugBucketGrid.rows}',
                         'captured=${_formatTime(report.capturedAt)}',
                       ],
                     ),
@@ -473,6 +553,9 @@ class _LayoutLogSheet extends StatelessWidget {
                       _LayoutLogBlock(
                         title: entry.name,
                         lines: [
+                          'bucket: ${entry.bucketSummary}',
+                          if (entry.parentBucketSummary != null)
+                            'parent bucket: ${entry.parentBucketSummary}',
                           'position: left ${entry.rect.left.toStringAsFixed(1)} '
                               '(${_pct(entry.leftRatio)}), top '
                               '${entry.rect.top.toStringAsFixed(1)} '
@@ -584,6 +667,7 @@ class _LandscapeTable extends StatelessWidget {
                 child: _SeatStage(
                   state: state,
                   debugKeyFor: debugKeyFor,
+                  layoutConfig: layoutConfig,
                   forceCompact: compact,
                 ),
               ),
@@ -641,6 +725,26 @@ class _PositionedLayer extends StatelessWidget {
   }
 }
 
+class _BucketPositionedLayer extends StatelessWidget {
+  const _BucketPositionedLayer({
+    required this.parentSize,
+    required this.bucketRect,
+    required this.child,
+  });
+
+  final Size parentSize;
+  final BucketRect bucketRect;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PositionedLayer(
+      rect: bucketRect.resolve(parentSize, _debugBucketGrid),
+      child: child,
+    );
+  }
+}
+
 class _PortraitTable extends StatelessWidget {
   const _PortraitTable({
     required this.state,
@@ -654,39 +758,66 @@ class _PortraitTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-          child: KeyedSubtree(
-            key: debugKeyFor('竖屏/顶栏'),
-            child: _GameTopBar(state: state, actions: actions),
-          ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: KeyedSubtree(
-              key: debugKeyFor('竖屏/座位舞台'),
-              child: _SeatStage(state: state, debugKeyFor: debugKeyFor),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final parentSize = Size(constraints.maxWidth, constraints.maxHeight);
+        return Stack(
+          children: [
+            _BucketPositionedLayer(
+              parentSize: parentSize,
+              bucketRect: const BucketRect(
+                x: 2.0,
+                y: 1.0,
+                width: 96.0,
+                height: 9.0,
+              ),
+              child: SizedBox.expand(
+                key: debugKeyFor('竖屏/顶栏'),
+                child: _GameTopBar(state: state, actions: actions),
+              ),
             ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-          child: KeyedSubtree(
-            key: debugKeyFor('竖屏/手牌区'),
-            child: _HandDock(state: state),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
-          child: KeyedSubtree(
-            key: debugKeyFor('竖屏/底部操作栏'),
-            child: _BottomActions(actions: actions),
-          ),
-        ),
-      ],
+            _BucketPositionedLayer(
+              parentSize: parentSize,
+              bucketRect: const BucketRect(
+                x: 2.0,
+                y: 10.8,
+                width: 96.0,
+                height: 58.0,
+              ),
+              child: SizedBox.expand(
+                key: debugKeyFor('竖屏/座位舞台'),
+                child: _SeatStage(state: state, debugKeyFor: debugKeyFor),
+              ),
+            ),
+            _BucketPositionedLayer(
+              parentSize: parentSize,
+              bucketRect: const BucketRect(
+                x: 2.0,
+                y: 70.0,
+                width: 96.0,
+                height: 17.0,
+              ),
+              child: SizedBox.expand(
+                key: debugKeyFor('竖屏/手牌区'),
+                child: _HandDock(state: state),
+              ),
+            ),
+            _BucketPositionedLayer(
+              parentSize: parentSize,
+              bucketRect: const BucketRect(
+                x: 2.0,
+                y: 88.2,
+                width: 96.0,
+                height: 10.2,
+              ),
+              child: SizedBox.expand(
+                key: debugKeyFor('竖屏/底部操作栏'),
+                child: _BottomActions(actions: actions),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -829,51 +960,59 @@ class _SeatStage extends StatelessWidget {
   const _SeatStage({
     required this.state,
     required this.debugKeyFor,
+    this.layoutConfig,
     this.forceCompact = false,
   });
 
   final GameTableViewModel state;
   final _LayoutDebugKeyProvider debugKeyFor;
+  final GameTableLayoutConfig? layoutConfig;
   final bool forceCompact;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final parentSize = Size(constraints.maxWidth, constraints.maxHeight);
         final compact =
             forceCompact ||
             constraints.maxHeight < 170 ||
             constraints.maxWidth < 650;
-        final centerWidth = compact
-            ? 196.0
-            : math.min(340.0, constraints.maxWidth * 0.36);
-        if (compact) {
-          return _CompactSeatStage(
-            state: state,
-            debugKeyFor: debugKeyFor,
-            centerWidth: centerWidth,
-          );
-        }
+        final layout = layoutConfig == null
+            ? _SeatStageBucketLayout.forMode(compact)
+            : _SeatStageBucketLayout.fromConfig(layoutConfig!, compact);
+        final centerRect = layout.center.resolve(parentSize, _debugBucketGrid);
+        final centerScale = compact
+            ? math.min(centerRect.width / 196.0, centerRect.height / 48.0)
+            : 1.0;
+        final centerWidth = centerRect.width;
 
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            Align(
-              alignment: Alignment.center,
-              child: KeyedSubtree(
+            _BucketPositionedLayer(
+              parentSize: parentSize,
+              bucketRect: layout.center,
+              child: SizedBox.expand(
                 key: debugKeyFor('中央出牌区'),
-                child: _CenterPlayPanel(
-                  state: state,
-                  width: centerWidth,
+                child: Center(
+                  child: _CenterPlayPanel(
+                    state: state,
+                    width: centerWidth,
+                    compact: compact,
+                    compactScale: centerScale.clamp(0.55, 1.0).toDouble(),
+                  ),
                 ),
               ),
             ),
             for (final player in state.players)
-              _MeasuredPlayerSeat(
+              _BucketPlayerSeat(
                 player: player,
                 state: state,
                 debugKeyFor: debugKeyFor,
-                compact: false,
+                layout: layout,
+                parentSize: parentSize,
+                compact: compact,
               ),
           ],
         );
@@ -882,131 +1021,128 @@ class _SeatStage extends StatelessWidget {
   }
 }
 
-class _CompactSeatStage extends StatelessWidget {
-  const _CompactSeatStage({
-    required this.state,
-    required this.debugKeyFor,
-    required this.centerWidth,
-  });
-
-  final GameTableViewModel state;
-  final _LayoutDebugKeyProvider debugKeyFor;
-  final double centerWidth;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final seatWidth = math.min(
-          154.0,
-          math.max(112.0, (constraints.maxWidth - 24) / 3),
-        );
-        final compactScale = seatWidth / 154.0;
-        final seatHeight = 54.0 * compactScale;
-        final centerGap = 10.0 * compactScale;
-        final middleWidth = math.max(
-          118.0,
-          constraints.maxWidth - (seatWidth * 2) - (centerGap * 2),
-        );
-        final compactCenterWidth = math.min(
-          centerWidth * compactScale,
-          middleWidth,
-        );
-        final centerHeight = 48.0 * compactScale;
-        final maxX = math.max(0.0, constraints.maxWidth - seatWidth);
-        final maxY = math.max(0.0, constraints.maxHeight - seatHeight);
-        final centerLeft = (constraints.maxWidth - compactCenterWidth) / 2;
-        final centerTop =
-            maxY + math.max(0.0, (seatHeight - centerHeight) / 2);
-
-        Offset seatOffset(GamePlayer player) {
-          final displaySeat =
-              _displaySeatIndex(player.seatIndex, state.selfSeat);
-          return switch (displaySeat) {
-            1 => Offset(0, maxY),
-            2 => Offset.zero,
-            3 => Offset(maxX / 2, 0),
-            4 => Offset(maxX, 0),
-            5 => Offset(maxX, maxY),
-            _ => Offset(maxX / 2, maxY),
-          };
-        }
-
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              left: centerLeft,
-              top: centerTop,
-              child: KeyedSubtree(
-                key: debugKeyFor('中央出牌区'),
-                child: _CenterPlayPanel(
-                  state: state,
-                  width: compactCenterWidth,
-                  compact: true,
-                  compactScale: compactScale,
-                ),
-              ),
-            ),
-            for (final player in state.players)
-              if (_displaySeatIndex(player.seatIndex, state.selfSeat) != 0)
-                Positioned(
-                  left: seatOffset(player).dx,
-                  top: seatOffset(player).dy,
-                  child: KeyedSubtree(
-                    key: debugKeyFor(
-                      '座位${player.seatIndex}/显示'
-                      '${_displaySeatIndex(player.seatIndex, state.selfSeat)}',
-                    ),
-                    child: _PlayerSeatV2(
-                      player: player,
-                      isCurrent: state.currentSeat == player.seatIndex,
-                      isAlly: player.team == state.selfTeam,
-                      showPlayPointer: false,
-                      compact: true,
-                      compactScale: compactScale,
-                    ),
-                  ),
-                ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _MeasuredPlayerSeat extends StatelessWidget {
-  const _MeasuredPlayerSeat({
+class _BucketPlayerSeat extends StatelessWidget {
+  const _BucketPlayerSeat({
     required this.player,
     required this.state,
     required this.debugKeyFor,
+    required this.layout,
+    required this.parentSize,
     required this.compact,
   });
 
   final GamePlayer player;
   final GameTableViewModel state;
   final _LayoutDebugKeyProvider debugKeyFor;
+  final _SeatStageBucketLayout layout;
+  final Size parentSize;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final displaySeat = _displaySeatIndex(player.seatIndex, state.selfSeat);
-    return Align(
-      alignment: _seatAlignment(displaySeat),
-      child: KeyedSubtree(
+    final bucketRect = layout.bucketForDisplaySeat(displaySeat);
+    if (bucketRect == null) {
+      return const SizedBox.shrink();
+    }
+    final rect = bucketRect.resolve(parentSize, _debugBucketGrid);
+    final compactScale = compact
+        ? math
+            .min(rect.width / 154.0, rect.height / 54.0)
+            .clamp(0.55, 1.0)
+            .toDouble()
+        : 1.0;
+
+    return _PositionedLayer(
+      rect: rect,
+      child: SizedBox.expand(
         key: debugKeyFor('座位${player.seatIndex}/显示$displaySeat'),
-        child: _PlayerSeatV2(
-          player: player,
-          isCurrent: state.currentSeat == player.seatIndex,
-          isAlly: player.team == state.selfTeam,
-          showPlayPointer: state.lastPlayedSeat == player.seatIndex,
-          countdownSeconds: state.currentSeat == player.seatIndex
-              ? state.turnSecondsRemaining
-              : null,
-          compact: compact,
+        child: Center(
+          child: _PlayerSeatV2(
+            player: player,
+            isCurrent: state.currentSeat == player.seatIndex,
+            isAlly: player.team == state.selfTeam,
+            showPlayPointer:
+                !compact && state.lastPlayedSeat == player.seatIndex,
+            countdownSeconds: state.currentSeat == player.seatIndex
+                ? state.turnSecondsRemaining
+                : null,
+            compact: compact,
+            compactScale: compactScale,
+          ),
         ),
       ),
     );
+  }
+}
+
+class _SeatStageBucketLayout {
+  const _SeatStageBucketLayout({
+    required this.center,
+    required this.seats,
+  });
+
+  factory _SeatStageBucketLayout.forMode(bool compact) {
+    return compact ? compactLayout : regularLayout;
+  }
+
+  factory _SeatStageBucketLayout.fromConfig(
+    GameTableLayoutConfig config,
+    bool compact,
+  ) {
+    final fallback = _SeatStageBucketLayout.forMode(compact);
+    BucketRect configuredRect(String id, BucketRect fallbackRect) {
+      final layer = config.layers[id];
+      if (layer == null) {
+        return fallbackRect;
+      }
+      return compact ? layer.landscapeCompact : layer.landscapeRegular;
+    }
+
+    return _SeatStageBucketLayout(
+      center: configuredRect('center_play_panel', fallback.center),
+      seats: {
+        for (final entry in fallback.seats.entries)
+          entry.key: entry.value == null
+              ? null
+              : configuredRect('seat_display_${entry.key}', entry.value!),
+      },
+    );
+  }
+
+  static const regularLayout = _SeatStageBucketLayout(
+    center: BucketRect(x: 25.0, y: 22.0, width: 50.0, height: 56.0),
+    seats: {
+      0: BucketRect(x: 34.0, y: 70.0, width: 32.0, height: 30.0),
+      1: BucketRect(x: 0.0, y: 58.0, width: 32.0, height: 30.0),
+      2: BucketRect(x: 0.0, y: 20.0, width: 32.0, height: 30.0),
+      3: BucketRect(x: 34.0, y: 0.0, width: 32.0, height: 30.0),
+      4: BucketRect(x: 68.0, y: 20.0, width: 32.0, height: 30.0),
+      5: BucketRect(x: 68.0, y: 58.0, width: 32.0, height: 30.0),
+    },
+  );
+
+  static const compactLayout = _SeatStageBucketLayout(
+    center: BucketRect(x: 34.0, y: 76.0, width: 32.0, height: 24.0),
+    seats: {
+      0: null,
+      1: BucketRect(x: 0.0, y: 76.0, width: 28.0, height: 24.0),
+      2: BucketRect(x: 0.0, y: 0.0, width: 28.0, height: 24.0),
+      3: BucketRect(x: 36.0, y: 0.0, width: 28.0, height: 24.0),
+      4: BucketRect(x: 72.0, y: 0.0, width: 28.0, height: 24.0),
+      5: BucketRect(x: 72.0, y: 76.0, width: 28.0, height: 24.0),
+    },
+  );
+
+  final BucketRect center;
+  final Map<int, BucketRect?> seats;
+
+  BucketRect? bucketForDisplaySeat(int displaySeat) {
+    final rect = seats[displaySeat];
+    if (rect == null || rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+    return rect;
   }
 }
 
@@ -2258,19 +2394,9 @@ int _displaySeatIndex(int seatIndex, int selfSeat) {
   return (seatIndex - selfSeat + 6) % 6;
 }
 
-Alignment _seatAlignment(int seat) {
-  return switch (seat) {
-    0 => const Alignment(0, 0.90),
-    1 => const Alignment(-0.92, 0.42),
-    2 => const Alignment(-0.92, -0.42),
-    3 => const Alignment(0, -0.84),
-    4 => const Alignment(0.92, -0.42),
-    5 => const Alignment(0.92, 0.42),
-    _ => Alignment.center,
-  };
-}
-
 String _pct(double value) => '${(value * 100).toStringAsFixed(1)}%';
+
+String _bucket(double value) => value.toStringAsFixed(1);
 
 String _formatTime(DateTime value) {
   String two(int number) => number.toString().padLeft(2, '0');

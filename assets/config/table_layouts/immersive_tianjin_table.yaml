@@ -56,6 +56,160 @@ layers:
           height: 41.0
           anchor: topLeft
 
+  - id: center_play_panel
+    debugName: 横屏/中央出牌区
+    component: CenterPlayPanel
+    parent: seat_stage
+    landscape:
+      regular:
+        bucketPosition:
+          mode: bucket
+          x: 25.0
+          y: 22.0
+          width: 50.0
+          height: 56.0
+          anchor: topLeft
+      compact:
+        bucketPosition:
+          mode: bucket
+          x: 34.0
+          y: 76.0
+          width: 32.0
+          height: 24.0
+          anchor: topLeft
+
+  - id: seat_display_0
+    debugName: 横屏/座位0显示位
+    component: PlayerSeat
+    parent: seat_stage
+    landscape:
+      regular:
+        bucketPosition:
+          mode: bucket
+          x: 34.0
+          y: 70.0
+          width: 32.0
+          height: 30.0
+          anchor: topLeft
+      compact:
+        bucketPosition:
+          mode: bucket
+          x: 34.0
+          y: 76.0
+          width: 0.0
+          height: 0.0
+          anchor: topLeft
+
+  - id: seat_display_1
+    debugName: 横屏/座位1显示位
+    component: PlayerSeat
+    parent: seat_stage
+    landscape:
+      regular:
+        bucketPosition:
+          mode: bucket
+          x: 0.0
+          y: 58.0
+          width: 32.0
+          height: 30.0
+          anchor: topLeft
+      compact:
+        bucketPosition:
+          mode: bucket
+          x: 0.0
+          y: 76.0
+          width: 28.0
+          height: 24.0
+          anchor: topLeft
+
+  - id: seat_display_2
+    debugName: 横屏/座位2显示位
+    component: PlayerSeat
+    parent: seat_stage
+    landscape:
+      regular:
+        bucketPosition:
+          mode: bucket
+          x: 0.0
+          y: 20.0
+          width: 32.0
+          height: 30.0
+          anchor: topLeft
+      compact:
+        bucketPosition:
+          mode: bucket
+          x: 0.0
+          y: 0.0
+          width: 28.0
+          height: 24.0
+          anchor: topLeft
+
+  - id: seat_display_3
+    debugName: 横屏/座位3显示位
+    component: PlayerSeat
+    parent: seat_stage
+    landscape:
+      regular:
+        bucketPosition:
+          mode: bucket
+          x: 34.0
+          y: 0.0
+          width: 32.0
+          height: 30.0
+          anchor: topLeft
+      compact:
+        bucketPosition:
+          mode: bucket
+          x: 36.0
+          y: 0.0
+          width: 28.0
+          height: 24.0
+          anchor: topLeft
+
+  - id: seat_display_4
+    debugName: 横屏/座位4显示位
+    component: PlayerSeat
+    parent: seat_stage
+    landscape:
+      regular:
+        bucketPosition:
+          mode: bucket
+          x: 68.0
+          y: 20.0
+          width: 32.0
+          height: 30.0
+          anchor: topLeft
+      compact:
+        bucketPosition:
+          mode: bucket
+          x: 72.0
+          y: 0.0
+          width: 28.0
+          height: 24.0
+          anchor: topLeft
+
+  - id: seat_display_5
+    debugName: 横屏/座位5显示位
+    component: PlayerSeat
+    parent: seat_stage
+    landscape:
+      regular:
+        bucketPosition:
+          mode: bucket
+          x: 68.0
+          y: 58.0
+          width: 32.0
+          height: 30.0
+          anchor: topLeft
+      compact:
+        bucketPosition:
+          mode: bucket
+          x: 72.0
+          y: 76.0
+          width: 28.0
+          height: 24.0
+          anchor: topLeft
+
   - id: hand_dock
     debugName: 横屏/手牌区
     component: HandDock

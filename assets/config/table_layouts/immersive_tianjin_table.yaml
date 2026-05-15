@@ -88,8 +88,8 @@ layers:
           mode: bucket
           x: 34.0
           y: 70.0
-          width: 32.0
-          height: 30.0
+          width: 0.0
+          height: 0.0
           anchor: topLeft
       compact:
         bucketPosition:
@@ -110,16 +110,16 @@ layers:
           mode: bucket
           x: 0.0
           y: 58.0
-          width: 32.0
-          height: 30.0
+          width: 16.0
+          height: 15.0
           anchor: topLeft
       compact:
         bucketPosition:
           mode: bucket
           x: 0.0
           y: 76.0
-          width: 28.0
-          height: 24.0
+          width: 14.0
+          height: 12.0
           anchor: topLeft
 
   - id: seat_display_2
@@ -132,16 +132,16 @@ layers:
           mode: bucket
           x: 0.0
           y: 32.0
-          width: 32.0
-          height: 30.0
+          width: 16.0
+          height: 15.0
           anchor: topLeft
       compact:
         bucketPosition:
           mode: bucket
           x: 0.0
           y: 12.0
-          width: 28.0
-          height: 24.0
+          width: 14.0
+          height: 12.0
           anchor: topLeft
 
   - id: seat_display_3
@@ -154,16 +154,16 @@ layers:
           mode: bucket
           x: 34.0
           y: 0.0
-          width: 32.0
-          height: 30.0
+          width: 16.0
+          height: 15.0
           anchor: topLeft
       compact:
         bucketPosition:
           mode: bucket
           x: 36.0
           y: 0.0
-          width: 28.0
-          height: 24.0
+          width: 14.0
+          height: 12.0
           anchor: topLeft
 
   - id: seat_display_4
@@ -176,16 +176,16 @@ layers:
           mode: bucket
           x: 78.0
           y: 20.0
-          width: 32.0
-          height: 30.0
+          width: 16.0
+          height: 15.0
           anchor: topLeft
       compact:
         bucketPosition:
           mode: bucket
           x: 82.0
           y: 0.0
-          width: 28.0
-          height: 24.0
+          width: 14.0
+          height: 12.0
           anchor: topLeft
 
   - id: seat_display_5
@@ -198,16 +198,16 @@ layers:
           mode: bucket
           x: 78.0
           y: 58.0
-          width: 32.0
-          height: 30.0
+          width: 16.0
+          height: 15.0
           anchor: topLeft
       compact:
         bucketPosition:
           mode: bucket
           x: 82.0
           y: 76.0
-          width: 28.0
-          height: 24.0
+          width: 14.0
+          height: 12.0
           anchor: topLeft
 
   - id: hand_dock

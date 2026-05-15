@@ -118,11 +118,11 @@ typedef _LayoutDebugKeyProvider = GlobalKey Function(String name);
 
 const BucketGrid _debugBucketGrid = BucketGrid(columns: 100, rows: 100);
 const double _handDockTopClearanceBuckets = 2.0;
-const double _v2HandBaselineRatio = 0.95;
 const double _v2RegularHandCardHeight = 98.0;
 const double _v2CompactHandCardHeight = 75.0;
 const double _v2RegularHandSelectedLift = 18.0;
 const double _v2CompactHandSelectedLift = 12.0;
+const double _v2RemoteSeatScale = 0.5;
 
 class GameTableShell extends StatefulWidget {
   const GameTableShell({
@@ -751,14 +751,10 @@ class _LandscapeTable extends StatelessWidget {
     final cardHeight =
         (compact ? _v2CompactHandCardHeight : _v2RegularHandCardHeight) *
             scale;
-    final selectedLift =
-        (compact ? _v2CompactHandSelectedLift : _v2RegularHandSelectedLift) *
-            scale;
     final topClearance = parentSize.height /
         _debugBucketGrid.rows *
         _handDockTopClearanceBuckets;
-    final height =
-        (cardHeight + selectedLift + topClearance) / _v2HandBaselineRatio;
+    final height = cardHeight + topClearance;
     final bottom =
         configuredRect.bottom.clamp(0.0, parentSize.height).toDouble();
     final top = math.max(0.0, bottom - height);
@@ -1117,6 +1113,7 @@ class _BucketPlayerSeat extends StatelessWidget {
             .clamp(0.55, 1.0)
             .toDouble()
         : 1.0;
+    final seatScale = displaySeat == 0 ? 1.0 : _v2RemoteSeatScale;
 
     return _PositionedLayer(
       rect: rect,
@@ -1134,11 +1131,10 @@ class _BucketPlayerSeat extends StatelessWidget {
               isAlly: player.team == state.selfTeam,
               showPlayPointer:
                   !compact && state.lastPlayedSeat == player.seatIndex,
-              countdownSeconds: state.currentSeat == player.seatIndex
-                  ? state.turnSecondsRemaining
-                  : null,
+              countdownSeconds: null,
               compact: compact,
               compactScale: compactScale,
+              sizeScale: seatScale,
             ),
           ),
         ),
@@ -1184,12 +1180,12 @@ class _SeatStageBucketLayout {
   static const regularLayout = _SeatStageBucketLayout(
     center: BucketRect(x: 25.0, y: 22.0, width: 50.0, height: 56.0),
     seats: {
-      0: BucketRect(x: 34.0, y: 70.0, width: 32.0, height: 30.0),
-      1: BucketRect(x: 0.0, y: 58.0, width: 32.0, height: 30.0),
-      2: BucketRect(x: 0.0, y: 32.0, width: 32.0, height: 30.0),
-      3: BucketRect(x: 34.0, y: 0.0, width: 32.0, height: 30.0),
-      4: BucketRect(x: 78.0, y: 20.0, width: 32.0, height: 30.0),
-      5: BucketRect(x: 78.0, y: 58.0, width: 32.0, height: 30.0),
+      0: null,
+      1: BucketRect(x: 0.0, y: 58.0, width: 16.0, height: 15.0),
+      2: BucketRect(x: 0.0, y: 32.0, width: 16.0, height: 15.0),
+      3: BucketRect(x: 34.0, y: 0.0, width: 16.0, height: 15.0),
+      4: BucketRect(x: 78.0, y: 20.0, width: 16.0, height: 15.0),
+      5: BucketRect(x: 78.0, y: 58.0, width: 16.0, height: 15.0),
     },
   );
 
@@ -1197,11 +1193,11 @@ class _SeatStageBucketLayout {
     center: BucketRect(x: 34.0, y: 76.0, width: 32.0, height: 24.0),
     seats: {
       0: null,
-      1: BucketRect(x: 0.0, y: 76.0, width: 28.0, height: 24.0),
-      2: BucketRect(x: 0.0, y: 12.0, width: 28.0, height: 24.0),
-      3: BucketRect(x: 36.0, y: 0.0, width: 28.0, height: 24.0),
-      4: BucketRect(x: 82.0, y: 0.0, width: 28.0, height: 24.0),
-      5: BucketRect(x: 82.0, y: 76.0, width: 28.0, height: 24.0),
+      1: BucketRect(x: 0.0, y: 76.0, width: 14.0, height: 12.0),
+      2: BucketRect(x: 0.0, y: 12.0, width: 14.0, height: 12.0),
+      3: BucketRect(x: 36.0, y: 0.0, width: 14.0, height: 12.0),
+      4: BucketRect(x: 82.0, y: 0.0, width: 14.0, height: 12.0),
+      5: BucketRect(x: 82.0, y: 76.0, width: 14.0, height: 12.0),
     },
   );
 
@@ -1233,7 +1229,6 @@ class _CenterPlayPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final playedCards = state.playedCards;
-    final turnSecondsRemaining = state.turnSecondsRemaining;
     if (compact) {
       final scale = compactScale;
       final panelHeight = 48.0 * scale;
@@ -1318,33 +1313,15 @@ class _CenterPlayPanel extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: 2 * scale),
-                  Row(
-                    children: [
-                      if (turnSecondsRemaining != null) ...[
-                        Text(
-                          '${turnSecondsRemaining}s',
-                          maxLines: 1,
-                          style: TextStyle(
-                            color: const Color(0xFFD09B3A),
-                            fontWeight: FontWeight.w900,
-                            fontSize: metaFont,
-                          ),
-                        ),
-                        SizedBox(width: 4 * scale),
-                      ],
-                      Expanded(
-                        child: Text(
-                          '轮到 ${state.currentPlayerName}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: const Color(0xFF345B73),
-                            fontWeight: FontWeight.w800,
-                            fontSize: metaFont,
-                          ),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    '轮到 ${state.currentPlayerName}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: const Color(0xFF345B73),
+                      fontWeight: FontWeight.w800,
+                      fontSize: metaFont,
+                    ),
                   ),
                 ],
               ),
@@ -1424,24 +1401,13 @@ class _CenterPlayPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  '轮到：${state.currentPlayerName}',
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF0C4380),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              if (turnSecondsRemaining != null) ...[
-                const SizedBox(width: 8),
-                _SmallBluePill(text: '${turnSecondsRemaining}s'),
-              ],
-            ],
+          Text(
+            '轮到：${state.currentPlayerName}',
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF0C4380),
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -1467,6 +1433,7 @@ class _PlayerSeatV2 extends StatelessWidget {
     this.countdownSeconds,
     this.compact = false,
     this.compactScale = 1,
+    this.sizeScale = 1,
   });
 
   final GamePlayer player;
@@ -1476,6 +1443,7 @@ class _PlayerSeatV2 extends StatelessWidget {
   final int? countdownSeconds;
   final bool compact;
   final double compactScale;
+  final double sizeScale;
 
   @override
   Widget build(BuildContext context) {
@@ -1577,7 +1545,7 @@ class _PlayerSeatV2 extends StatelessWidget {
     final countdown = countdownSeconds;
     final showCountdown = countdown != null && isCurrent;
 
-    return Column(
+    final seatContent = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (showPlayPointer)
@@ -1597,6 +1565,15 @@ class _PlayerSeatV2 extends StatelessWidget {
           ],
         ),
       ],
+    );
+
+    if (sizeScale == 1.0) {
+      return seatContent;
+    }
+
+    return Transform.scale(
+      scale: sizeScale,
+      child: seatContent,
     );
   }
 
@@ -1630,14 +1607,11 @@ class _HandDock extends StatelessWidget {
         : state.selectedCombo.isValid
             ? '${state.selectedCombo.label}${state.canPlay ? '，可以出' : '，压不过上家'}'
             : state.selectedCombo.label;
+    final countdown = state.turnSecondsRemaining;
     final horizontalPadding = compact ? 14.0 : 18.0;
+    final countdownReserve = countdown == null ? 0.0 : (compact ? 58.0 : 68.0);
     final statusTop = compact ? 10.0 : 14.0;
     return Container(
-      constraints: BoxConstraints(
-        minHeight: showStatus
-            ? (compact ? 112 : 130)
-            : (compact ? 100 : 118),
-      ),
       clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.45),
@@ -1655,7 +1629,12 @@ class _HandDock extends StatelessWidget {
         children: [
           Positioned.fill(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                0,
+                horizontalPadding + countdownReserve,
+                0,
+              ),
               child: _V2HandScroller(
                 cards: state.hand,
                 onToggle: state.onToggleCard,
@@ -1694,6 +1673,15 @@ class _HandDock extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+          if (countdown != null)
+            Positioned(
+              right: horizontalPadding,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _SmallBluePill(text: '${countdown}s'),
               ),
             ),
         ],
@@ -1740,9 +1728,13 @@ class _V2HandScroller extends StatelessWidget {
             constraints.maxHeight.isFinite && constraints.maxHeight > 0
             ? constraints.maxHeight
             : cardHeight + selectedLift;
-        final cardBottom = availableHeight * _v2HandBaselineRatio;
+        final cardBottom = availableHeight;
         final normalTop = cardBottom - cardHeight;
-        final selectedTop = normalTop - selectedLift;
+        final fittedSelectedLift = math.min(
+          selectedLift,
+          math.max(0, normalTop),
+        );
+        final selectedTop = normalTop - fittedSelectedLift;
         final fittedStep = cards.length <= 1
             ? preferredStep
             : (availableWidth - cardWidth) / (cards.length - 1);

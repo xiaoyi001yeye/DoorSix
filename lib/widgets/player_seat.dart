@@ -100,6 +100,17 @@ class PlayerSeat extends StatelessWidget {
       ),
     );
 
+    final seatContent = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        content,
+        if (isCurrent && countdownSeconds != null) ...[
+          const SizedBox(width: 6),
+          _TurnCountdownPill(seconds: countdownSeconds!),
+        ],
+      ],
+    );
+
     final seat = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -115,11 +126,7 @@ class PlayerSeat extends StatelessWidget {
               .slideY(begin: -0.08, end: 0),
           const SizedBox(height: 4),
         ],
-        if (isCurrent && countdownSeconds != null) ...[
-          _TurnCountdownPill(seconds: countdownSeconds!),
-          const SizedBox(height: 5),
-        ],
-        content,
+        seatContent,
       ],
     );
 

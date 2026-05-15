@@ -2326,7 +2326,7 @@ class _RoundIconButtonState extends State<_RoundIconButton> {
                             Shadow(
                               color: Colors.black.withValues(alpha: 0.18),
                               blurRadius: 3 * _buttonScale,
-                              offset: Offset(0, 1 * _buttonScale),
+                              offset: const Offset(0, 1 * _buttonScale),
                             ),
                           ],
                         ),
@@ -2352,14 +2352,14 @@ class _RoundIconButtonState extends State<_RoundIconButton> {
         mainAxisSize: MainAxisSize.min,
         children: [
           button,
-          SizedBox(height: 2 * _buttonScale),
+          const SizedBox(height: 2 * _buttonScale),
           Text(
             caption,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: const Color(0xFF0C4380),
+            style: const TextStyle(
+              color: Color(0xFF0C4380),
               fontSize: 11 * _buttonScale,
               fontWeight: FontWeight.w900,
             ),

@@ -219,6 +219,8 @@ docs/release-notes/android/0.2.0+2.md
 
 发布前必须提交对应版本的 release notes。CI 发布时读取该文件生成发布清单中的 `releaseNotes`，并用于 GitHub Release 或等价发布记录。不要只依赖 commit 自动摘要或临时 workflow 输入生成用户可见更新内容；如果缺少对应版本的 release notes，正式发布应失败并提示补充。
 
+用户要求“发布新版本”或后续类似安卓发布任务时，只需要正确执行发布任务本身：递增版本、写 release notes、提交并 push，让 CI 自动构建、打 tag、上传 APK 和更新发布清单。不要在发布命令完成后继续监听 GitHub Actions 是否完成，除非用户明确要求检查 CI 状态或排查发布失败。
+
 安卓发布能力必须支持“提交代码并 push 后可以发布一个新版本”。普通 push 如果 `pubspec.yaml` 中的 `version` 没有递增，CI 只运行分析、测试和构建验证，不发布新 APK，并在 CI summary 中说明“版本未递增，跳过发布”。当本次提交已经递增 `pubspec.yaml` 中的 `version`，并提交了对应 `docs/release-notes/android/<versionName>+<versionCode>.md` 时，CI 应自动创建或复用 `android-v<versionName>+<versionCode>` tag，构建 APK，上传到 `39.104.67.175`，更新 `latest-android-stable.json`，让旧版安卓端在启动或回到前台检查版本接口时收到新版本提示。不要要求人工预先创建 tag；tag 不存在时由 CI 自动创建。安卓发布只由分支 push 或 `workflow_dispatch` 手动触发执行；`android-v*` tag 只作为发布追溯记录，tag push 本身不得触发发布 workflow，避免同一版本重复发布。若 release notes 缺失、tag 指向其他 commit、构建失败、上传失败或下载地址校验失败，发布必须失败并给出明确原因，不能静默跳过或污染线上 latest 清单。
 
 GitHub Release 是非阻塞发布记录。只要 APK 上传成功、下载地址校验成功、`latest-android-stable.json` 更新成功，就认为安卓发布成功。GitHub Release 创建或更新失败时，CI 应在 summary 中标记 warning 并提示后续补建，不得回滚已经成功的安卓发布。

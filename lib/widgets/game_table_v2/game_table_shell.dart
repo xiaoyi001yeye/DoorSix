@@ -117,6 +117,12 @@ class GameTableViewModel {
 typedef _LayoutDebugKeyProvider = GlobalKey Function(String name);
 
 const BucketGrid _debugBucketGrid = BucketGrid(columns: 100, rows: 100);
+const double _handDockTopClearanceBuckets = 2.0;
+const double _v2HandBaselineRatio = 0.95;
+const double _v2RegularHandCardHeight = 98.0;
+const double _v2CompactHandCardHeight = 75.0;
+const double _v2RegularHandSelectedLift = 18.0;
+const double _v2CompactHandSelectedLift = 12.0;
 
 class GameTableShell extends StatefulWidget {
   const GameTableShell({
@@ -664,11 +670,18 @@ class _LandscapeTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final parentSize = Size(constraints.maxWidth, constraints.maxHeight);
         final resolvedLayout = GameTableLayoutResolver.resolveLandscape(
           config: layoutConfig,
-          parentSize: Size(constraints.maxWidth, constraints.maxHeight),
+          parentSize: parentSize,
         );
         final compact = resolvedLayout.compact;
+        final handDockRect = _handDockRectForCards(
+          context: context,
+          configuredRect: resolvedLayout.rectFor('hand_dock'),
+          parentSize: parentSize,
+          compact: compact,
+        );
 
         return Stack(
           children: [
@@ -692,7 +705,7 @@ class _LandscapeTable extends StatelessWidget {
               ),
             ),
             _PositionedLayer(
-              rect: resolvedLayout.rectFor('hand_dock'),
+              rect: handDockRect,
               child: KeyedSubtree(
                 key: debugKeyFor('横屏/手牌区'),
                 child: _HandDock(
@@ -719,6 +732,42 @@ class _LandscapeTable extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+
+  Rect _handDockRectForCards({
+    required BuildContext context,
+    required Rect configuredRect,
+    required Size parentSize,
+    required bool compact,
+  }) {
+    if (configuredRect.isEmpty ||
+        !parentSize.height.isFinite ||
+        parentSize.height <= 0) {
+      return configuredRect;
+    }
+
+    final scale = CardDisplaySettingsScope.of(context).scale;
+    final cardHeight =
+        (compact ? _v2CompactHandCardHeight : _v2RegularHandCardHeight) *
+            scale;
+    final selectedLift =
+        (compact ? _v2CompactHandSelectedLift : _v2RegularHandSelectedLift) *
+            scale;
+    final topClearance = parentSize.height /
+        _debugBucketGrid.rows *
+        _handDockTopClearanceBuckets;
+    final height =
+        (cardHeight + selectedLift + topClearance) / _v2HandBaselineRatio;
+    final bottom =
+        configuredRect.bottom.clamp(0.0, parentSize.height).toDouble();
+    final top = math.max(0.0, bottom - height);
+
+    return Rect.fromLTWH(
+      configuredRect.left,
+      top,
+      configuredRect.width,
+      bottom - top,
     );
   }
 }
@@ -944,10 +993,6 @@ class _GameTopBar extends StatelessWidget {
                 ),
               ),
             ),
-            if (!compact && state.turnSecondsRemaining != null) ...[
-              const SizedBox(width: 10),
-              _TimerBadge(seconds: state.turnSecondsRemaining!),
-            ],
             const SizedBox(width: 10),
             for (final action in topActions) ...[
               _RoundIconButton(
@@ -1076,18 +1121,24 @@ class _BucketPlayerSeat extends StatelessWidget {
       rect: rect,
       child: SizedBox.expand(
         key: debugKeyFor('座位${player.seatIndex}/显示$displaySeat'),
-        child: Center(
-          child: _PlayerSeatV2(
-            player: player,
-            isCurrent: state.currentSeat == player.seatIndex,
-            isAlly: player.team == state.selfTeam,
-            showPlayPointer:
-                !compact && state.lastPlayedSeat == player.seatIndex,
-            countdownSeconds: state.currentSeat == player.seatIndex
-                ? state.turnSecondsRemaining
-                : null,
-            compact: compact,
-            compactScale: compactScale,
+        child: OverflowBox(
+          minWidth: 0,
+          maxWidth: double.infinity,
+          minHeight: 0,
+          maxHeight: double.infinity,
+          child: Center(
+            child: _PlayerSeatV2(
+              player: player,
+              isCurrent: state.currentSeat == player.seatIndex,
+              isAlly: player.team == state.selfTeam,
+              showPlayPointer:
+                  !compact && state.lastPlayedSeat == player.seatIndex,
+              countdownSeconds: state.currentSeat == player.seatIndex
+                  ? state.turnSecondsRemaining
+                  : null,
+              compact: compact,
+              compactScale: compactScale,
+            ),
           ),
         ),
       ),
@@ -1408,100 +1459,109 @@ class _PlayerSeatV2 extends StatelessWidget {
     final iconSize = compact ? math.max(16.0, 19.0 * scale) : 26.0;
     final nameFont = compact ? math.max(11.0, 14.0 * scale) : 18.0;
     final metaFont = compact ? math.max(9.0, 10.0 * scale) : 12.0;
+    final seat = Container(
+      width: seatWidth,
+      height: seatHeight,
+      padding: EdgeInsets.fromLTRB(
+        compact ? 6 * scale : 8,
+        compact ? 6 * scale : 8,
+        compact ? 8 * scale : 12,
+        compact ? 6 * scale : 8,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(compact ? 27 : 38),
+        border: Border.all(
+          color: borderColor,
+          width: isCurrent ? 2.2 : 1.4,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          PlayerAvatarBadge(
+            avatarId: player.avatarId,
+            size: avatarSize,
+            showRing: true,
+          ),
+          SizedBox(width: compact ? 7 * scale : 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (player.isUser) ...[
+                      _DealerMark(team: player.team),
+                      SizedBox(width: compact ? 3 : 4),
+                    ],
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: const Color(0xFF0C4380),
+                          fontWeight: FontWeight.w900,
+                          fontSize: nameFont,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: compact ? 2 : 4),
+                Text(
+                  _metaText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: player.finishRank == null
+                        ? const Color(0xFF345B73)
+                        : const Color(0xFF247A37),
+                    fontWeight: FontWeight.w800,
+                    fontSize: metaFont,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: compact ? 4 * scale : 6),
+          Icon(
+            Icons.style_rounded,
+            color: const Color(0xFF1F65B5),
+            size: iconSize,
+          ),
+        ],
+      ),
+    );
+    final countdown = countdownSeconds;
+    final showCountdown = countdown != null && isCurrent;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (countdownSeconds != null && isCurrent) ...[
-          _SmallBluePill(text: '${countdownSeconds}s'),
-          SizedBox(height: compact ? 2 : 4),
-        ],
         if (showPlayPointer)
           Icon(
             Icons.arrow_drop_down_rounded,
             color: const Color(0xFFD09B3A),
             size: compact ? 20 : 28,
-        ),
-        Container(
-          width: seatWidth,
-          height: seatHeight,
-          padding: EdgeInsets.fromLTRB(
-            compact ? 6 * scale : 8,
-            compact ? 6 * scale : 8,
-            compact ? 8 * scale : 12,
-            compact ? 6 * scale : 8,
           ),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.72),
-            borderRadius: BorderRadius.circular(compact ? 27 : 38),
-            border: Border.all(
-              color: borderColor,
-              width: isCurrent ? 2.2 : 1.4,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.14),
-                blurRadius: 14,
-                offset: const Offset(0, 7),
-              ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            seat,
+            if (showCountdown) ...[
+              SizedBox(width: compact ? 5 : 8),
+              _SmallBluePill(text: '${countdown!}s'),
             ],
-          ),
-          child: Row(
-            children: [
-              PlayerAvatarBadge(
-                avatarId: player.avatarId,
-                size: avatarSize,
-                showRing: true,
-              ),
-              SizedBox(width: compact ? 7 * scale : 10),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        if (player.isUser) ...[
-                          _DealerMark(team: player.team),
-                          SizedBox(width: compact ? 3 : 4),
-                        ],
-                        Expanded(
-                          child: Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: const Color(0xFF0C4380),
-                              fontWeight: FontWeight.w900,
-                              fontSize: nameFont,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: compact ? 2 : 4),
-                    Text(
-                      _metaText,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: player.finishRank == null
-                            ? const Color(0xFF345B73)
-                            : const Color(0xFF247A37),
-                        fontWeight: FontWeight.w800,
-                        fontSize: metaFont,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(width: compact ? 4 * scale : 6),
-              Icon(
-                Icons.style_rounded,
-                color: const Color(0xFF1F65B5),
-                size: iconSize,
-              ),
-            ],
-          ),
+          ],
         ),
       ],
     );
@@ -1647,8 +1707,7 @@ class _V2HandScroller extends StatelessWidget {
             constraints.maxHeight.isFinite && constraints.maxHeight > 0
             ? constraints.maxHeight
             : cardHeight + selectedLift;
-        const handBaselineRatio = 0.95;
-        final cardBottom = availableHeight * handBaselineRatio;
+        final cardBottom = availableHeight * _v2HandBaselineRatio;
         final normalTop = cardBottom - cardHeight;
         final selectedTop = normalTop - selectedLift;
         final fittedStep = cards.length <= 1
@@ -2279,37 +2338,6 @@ class _RoundIconButtonState extends State<_RoundIconButton> {
     return widget.tone == _RoundButtonTone.blue
         ? Colors.white
         : const Color(0xFF0C4380);
-  }
-}
-
-class _TimerBadge extends StatelessWidget {
-  const _TimerBadge({required this.seconds});
-
-  final int seconds;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 46,
-      width: 118,
-      alignment: Alignment.center,
-      decoration: _bluePanelDecoration(radius: 18),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.timer_outlined, color: Colors.white, size: 21),
-          const SizedBox(width: 6),
-          Text(
-            '${seconds.toString().padLeft(2, '0')}s',
-            style: const TextStyle(
-              color: Color(0xFFFFECA8),
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 

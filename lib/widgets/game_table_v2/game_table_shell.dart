@@ -1038,10 +1038,11 @@ class _SeatStage extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final parentSize = Size(constraints.maxWidth, constraints.maxHeight);
-        final compact =
-            forceCompact ||
-            constraints.maxHeight < 170 ||
-            constraints.maxWidth < 650;
+        final compact = layoutConfig != null
+            ? forceCompact
+            : forceCompact ||
+                constraints.maxHeight < 170 ||
+                constraints.maxWidth < 650;
         final layout = layoutConfig == null
             ? _SeatStageBucketLayout.forMode(compact)
             : _SeatStageBucketLayout.fromConfig(layoutConfig!, compact);
@@ -1185,10 +1186,10 @@ class _SeatStageBucketLayout {
     seats: {
       0: BucketRect(x: 34.0, y: 70.0, width: 32.0, height: 30.0),
       1: BucketRect(x: 0.0, y: 58.0, width: 32.0, height: 30.0),
-      2: BucketRect(x: 0.0, y: 20.0, width: 32.0, height: 30.0),
+      2: BucketRect(x: 0.0, y: 32.0, width: 32.0, height: 30.0),
       3: BucketRect(x: 34.0, y: 0.0, width: 32.0, height: 30.0),
-      4: BucketRect(x: 68.0, y: 20.0, width: 32.0, height: 30.0),
-      5: BucketRect(x: 68.0, y: 58.0, width: 32.0, height: 30.0),
+      4: BucketRect(x: 78.0, y: 20.0, width: 32.0, height: 30.0),
+      5: BucketRect(x: 78.0, y: 58.0, width: 32.0, height: 30.0),
     },
   );
 
@@ -1197,10 +1198,10 @@ class _SeatStageBucketLayout {
     seats: {
       0: null,
       1: BucketRect(x: 0.0, y: 76.0, width: 28.0, height: 24.0),
-      2: BucketRect(x: 0.0, y: 0.0, width: 28.0, height: 24.0),
+      2: BucketRect(x: 0.0, y: 12.0, width: 28.0, height: 24.0),
       3: BucketRect(x: 36.0, y: 0.0, width: 28.0, height: 24.0),
-      4: BucketRect(x: 72.0, y: 0.0, width: 28.0, height: 24.0),
-      5: BucketRect(x: 72.0, y: 76.0, width: 28.0, height: 24.0),
+      4: BucketRect(x: 82.0, y: 0.0, width: 28.0, height: 24.0),
+      5: BucketRect(x: 82.0, y: 76.0, width: 28.0, height: 24.0),
     },
   );
 
@@ -1232,6 +1233,7 @@ class _CenterPlayPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final playedCards = state.playedCards;
+    final turnSecondsRemaining = state.turnSecondsRemaining;
     if (compact) {
       final scale = compactScale;
       final panelHeight = 48.0 * scale;
@@ -1316,15 +1318,33 @@ class _CenterPlayPanel extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: 2 * scale),
-                  Text(
-                    '轮到 ${state.currentPlayerName}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: const Color(0xFF345B73),
-                      fontWeight: FontWeight.w800,
-                      fontSize: metaFont,
-                    ),
+                  Row(
+                    children: [
+                      if (turnSecondsRemaining != null) ...[
+                        Text(
+                          '${turnSecondsRemaining}s',
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: const Color(0xFFD09B3A),
+                            fontWeight: FontWeight.w900,
+                            fontSize: metaFont,
+                          ),
+                        ),
+                        SizedBox(width: 4 * scale),
+                      ],
+                      Expanded(
+                        child: Text(
+                          '轮到 ${state.currentPlayerName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: const Color(0xFF345B73),
+                            fontWeight: FontWeight.w800,
+                            fontSize: metaFont,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1390,7 +1410,9 @@ class _CenterPlayPanel extends StatelessWidget {
             ),
           const SizedBox(height: 8),
           _SmallBluePill(
-            text: state.lastPlayedBy == null ? '等待首出' : '上手：${state.lastPlayedBy}',
+            text: state.lastPlayedBy == null
+                ? '等待首出'
+                : '上手：${state.lastPlayedBy}',
           ),
           const SizedBox(height: 10),
           Text(
@@ -1402,13 +1424,24 @@ class _CenterPlayPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            '轮到：${state.currentPlayerName}',
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFF0C4380),
-              fontWeight: FontWeight.w800,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  '轮到：${state.currentPlayerName}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF0C4380),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (turnSecondsRemaining != null) ...[
+                const SizedBox(width: 8),
+                _SmallBluePill(text: '${turnSecondsRemaining}s'),
+              ],
+            ],
           ),
         ],
       ),

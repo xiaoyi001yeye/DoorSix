@@ -25,7 +25,7 @@ class GameTableLayoutResolver {
     required GameTableLayoutConfig config,
     required Size parentSize,
   }) {
-    final compact = config.isLandscapeCompact(parentSize);
+    const compact = false;
     return ResolvedGameTableLayout(
       configId: config.id,
       compact: compact,

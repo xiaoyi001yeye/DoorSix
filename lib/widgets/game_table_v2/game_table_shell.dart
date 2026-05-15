@@ -1112,6 +1112,10 @@ class _BucketPlayerSeat extends StatelessWidget {
             .toDouble()
         : 1.0;
     final seatScale = displaySeat == 0 ? 1.0 : _v2RemoteSeatScale;
+    final countdownSeconds = state.currentSeat == player.seatIndex &&
+            displaySeat != 0
+        ? state.turnSecondsRemaining
+        : null;
 
     return _PositionedLayer(
       rect: rect,
@@ -1129,7 +1133,7 @@ class _BucketPlayerSeat extends StatelessWidget {
               isAlly: player.team == state.selfTeam,
               showPlayPointer:
                   !compact && state.lastPlayedSeat == player.seatIndex,
-              countdownSeconds: null,
+              countdownSeconds: countdownSeconds,
               compact: compact,
               compactScale: compactScale,
               sizeScale: seatScale,
@@ -1605,7 +1609,11 @@ class _HandDock extends StatelessWidget {
         : state.selectedCombo.isValid
             ? '${state.selectedCombo.label}${state.canPlay ? '，可以出' : '，压不过上家'}'
             : state.selectedCombo.label;
-    final countdown = state.turnSecondsRemaining;
+    final currentSeat = state.currentSeat;
+    final showHandCountdown = currentSeat != null &&
+        _displaySeatIndex(currentSeat, state.selfSeat) == 0;
+    final countdown =
+        showHandCountdown ? state.turnSecondsRemaining : null;
     final horizontalPadding = compact ? 14.0 : 18.0;
     final countdownReserve = countdown == null ? 0.0 : (compact ? 58.0 : 68.0);
     final statusTop = compact ? 10.0 : 14.0;
@@ -1808,7 +1816,7 @@ class _ActionColumn extends StatelessWidget {
       children: [
         for (var index = 0; index < buttons.length; index += 1) ...[
           _ActionButton(action: buttons[index], compact: compact),
-          if (index != buttons.length - 1) SizedBox(height: compact ? 8 : 10),
+          if (index != buttons.length - 1) SizedBox(height: compact ? 6 : 7),
         ],
       ],
     );
@@ -2004,14 +2012,21 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPrimary = action.placement == GameActionPlacement.primary;
+    final height = compact ? 32.0 : 38.0;
+    final fontSize = compact ? 10.5 : 12.5;
     return Tooltip(
       message: action.enabled ? action.label : action.disabledReason ?? action.label,
       child: FilledButton.icon(
         onPressed: action.enabled ? action.onPressed : null,
         icon: Icon(action.icon),
-        label: Text(action.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        label: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(action.label, maxLines: 1, softWrap: false),
+        ),
         style: FilledButton.styleFrom(
-          minimumSize: Size.fromHeight(compact ? 46 : 54),
+          minimumSize: Size.fromHeight(height),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          iconSize: compact ? 14 : 16,
           backgroundColor: isPrimary
               ? const Color(0xFF2F8E2D)
               : const Color(0xFF2469AA),
@@ -2019,14 +2034,14 @@ class _ActionButton extends StatelessWidget {
           foregroundColor: Colors.white,
           disabledForegroundColor: Colors.white70,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(11),
             side: BorderSide(
               color: isPrimary ? const Color(0xFFE8D889) : const Color(0xFFD2B56F),
-              width: 1.4,
+              width: 1,
             ),
           ),
           textStyle: TextStyle(
-            fontSize: compact ? 15 : 18,
+            fontSize: fontSize,
             fontWeight: FontWeight.w900,
           ),
         ),

@@ -217,17 +217,17 @@ layers:
       regular:
         bucketPosition:
           mode: bucket
-          x: 19.0
+          x: 14.0
           y: 70.0
-          width: 73.2
+          width: 58.2
           height: 28.0
           anchor: topLeft
       compact:
         bucketPosition:
           mode: bucket
-          x: 19.0
+          x: 14.0
           y: 69.6
-          width: 51.9
+          width: 36.9
           height: 28.0
           anchor: topLeft
 
@@ -238,18 +238,18 @@ layers:
       regular:
         bucketPosition:
           mode: bucket
-          x: 90.2
-          y: 82.7
-          width: 8.2
-          height: 14.0
+          x: 75.0
+          y: 76.0
+          width: 13.0
+          height: 22.0
           anchor: topLeft
       compact:
         bucketPosition:
           mode: bucket
-          x: 84.2
-          y: 66.2
-          width: 14.1
-          height: 24.0
+          x: 75.0
+          y: 66.0
+          width: 13.0
+          height: 22.0
           anchor: topLeft
 
   - id: utility_actions
@@ -260,7 +260,7 @@ layers:
         bucketPosition:
           mode: bucket
           x: 7.3
-          y: 85.3
+          y: 75.3
           width: 5.4
           height: 4.6
           anchor: topLeft
@@ -268,7 +268,7 @@ layers:
         bucketPosition:
           mode: bucket
           x: 9.2
-          y: 74.3
+          y: 64.3
           width: 8.8
           height: 8.0
           anchor: topLeft

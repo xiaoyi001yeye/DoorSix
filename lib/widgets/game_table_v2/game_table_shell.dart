@@ -1559,7 +1559,7 @@ class _PlayerSeatV2 extends StatelessWidget {
             seat,
             if (showCountdown) ...[
               SizedBox(width: compact ? 5 : 8),
-              _SmallBluePill(text: '${countdown!}s'),
+              _SmallBluePill(text: '${countdown}s'),
             ],
           ],
         ),

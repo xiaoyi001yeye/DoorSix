@@ -120,8 +120,6 @@ const BucketGrid _debugBucketGrid = BucketGrid(columns: 100, rows: 100);
 const double _handDockTopClearanceBuckets = 2.0;
 const double _v2RegularHandCardHeight = 98.0;
 const double _v2CompactHandCardHeight = 75.0;
-const double _v2RegularHandSelectedLift = 18.0;
-const double _v2CompactHandSelectedLift = 12.0;
 const double _v2RemoteSeatScale = 0.5;
 
 class GameTableShell extends StatefulWidget {

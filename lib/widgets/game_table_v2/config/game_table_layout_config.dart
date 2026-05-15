@@ -76,13 +76,13 @@ class GameTableLayoutConfig {
         debugName: '横屏/右侧操作栏',
         landscapeRegular: BucketRect(
           x: 75.0,
-          y: 76.0,
+          y: 71.0,
           width: 13.0,
           height: 22.0,
         ),
         landscapeCompact: BucketRect(
           x: 75.0,
-          y: 66.0,
+          y: 61.0,
           width: 13.0,
           height: 22.0,
         ),

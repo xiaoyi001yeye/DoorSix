@@ -2241,7 +2241,8 @@ class _RoundIconButton extends StatefulWidget {
 }
 
 class _RoundIconButtonState extends State<_RoundIconButton> {
-  static const _buttonSize = 54.0;
+  static const _buttonSize = 50.0;
+  static const _buttonScale = _buttonSize / 54.0;
 
   bool _pressed = false;
   bool _hovered = false;
@@ -2257,7 +2258,8 @@ class _RoundIconButtonState extends State<_RoundIconButton> {
                 ? 3
                 : 0;
     final iconColor = _iconColor(enabled);
-    final iconSize = widget.tone == _RoundButtonTone.blue ? 30.0 : 28.0;
+    final iconSize =
+        (widget.tone == _RoundButtonTone.blue ? 30.0 : 28.0) * _buttonScale;
     final button = Tooltip(
       message: widget.tooltip,
       child: Semantics(
@@ -2290,13 +2292,13 @@ class _RoundIconButtonState extends State<_RoundIconButton> {
                       color: Colors.black.withValues(
                         alpha: enabled ? 0.18 : 0.08,
                       ),
-                      blurRadius: _pressed ? 5 : 10,
-                      offset: Offset(0, _pressed ? 2 : 5),
+                      blurRadius: (_pressed ? 5 : 10) * _buttonScale,
+                      offset: Offset(0, (_pressed ? 2 : 5) * _buttonScale),
                     ),
                     if (_hovered && enabled)
                       BoxShadow(
                         color: const Color(0xFFFFD35E).withValues(alpha: 0.35),
-                        blurRadius: 14,
+                        blurRadius: 14 * _buttonScale,
                       ),
                   ],
                 ),
@@ -2323,8 +2325,8 @@ class _RoundIconButtonState extends State<_RoundIconButton> {
                           shadows: [
                             Shadow(
                               color: Colors.black.withValues(alpha: 0.18),
-                              blurRadius: 3,
-                              offset: const Offset(0, 1),
+                              blurRadius: 3 * _buttonScale,
+                              offset: Offset(0, 1 * _buttonScale),
                             ),
                           ],
                         ),
@@ -2345,20 +2347,20 @@ class _RoundIconButtonState extends State<_RoundIconButton> {
     }
 
     return SizedBox(
-      width: 62,
+      width: 62 * _buttonScale,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           button,
-          const SizedBox(height: 2),
+          SizedBox(height: 2 * _buttonScale),
           Text(
             caption,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFF0C4380),
-              fontSize: 11,
+            style: TextStyle(
+              color: const Color(0xFF0C4380),
+              fontSize: 11 * _buttonScale,
               fontWeight: FontWeight.w900,
             ),
           ),

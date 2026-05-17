@@ -20,6 +20,21 @@ function defaultAndroidDownloadBaseUrl() {
     `${process.env.PUBLIC_BASE_URL || 'http://39.104.67.175'}/downloads/android`;
 }
 
+function defaultWordSnapManifestPath() {
+  return process.env.WORDSNAP_APP_UPDATE_MANIFEST_PATH ||
+    '/opt/wordsnap/releases/manifests/latest-android-stable.json';
+}
+
+function defaultWordSnapAndroidReleaseDir() {
+  return process.env.WORDSNAP_RELEASE_ANDROID_DIR ||
+    '/opt/wordsnap/releases/android';
+}
+
+function defaultWordSnapAndroidDownloadBaseUrl() {
+  return process.env.WORDSNAP_APP_UPDATE_DOWNLOAD_BASE_URL ||
+    `${process.env.PUBLIC_BASE_URL || 'http://39.104.67.175'}/downloads/wordsnap/android`;
+}
+
 function defaultEnvironment() {
   return process.env.APP_UPDATE_ENVIRONMENT || 'prod';
 }
@@ -63,9 +78,32 @@ async function loadReleaseByVersionCode({ platform = 'android', versionCode }) {
 }
 
 async function listPublishedAndroidApks() {
+  return listPublishedAndroidApksFromSource({
+    androidReleaseDir: defaultAndroidReleaseDir(),
+    downloadBaseUrl: defaultAndroidDownloadBaseUrl(),
+    fallbackFileName: 'DoorSix.apk',
+    manifestPath: defaultManifestPath(),
+  });
+}
+
+async function listPublishedWordSnapAndroidApks() {
+  return listPublishedAndroidApksFromSource({
+    androidReleaseDir: defaultWordSnapAndroidReleaseDir(),
+    downloadBaseUrl: defaultWordSnapAndroidDownloadBaseUrl(),
+    fallbackFileName: 'WordSnap.apk',
+    manifestPath: defaultWordSnapManifestPath(),
+  });
+}
+
+async function listPublishedAndroidApksFromSource({
+  androidReleaseDir,
+  downloadBaseUrl,
+  fallbackFileName,
+  manifestPath,
+}) {
   const [releases, files] = await Promise.all([
-    loadReleaseManifests({ platform: 'android' }),
-    listApkFiles(defaultAndroidReleaseDir()),
+    loadReleaseManifestsFromPath({ manifestPath, platform: 'android' }),
+    listApkFiles(androidReleaseDir),
   ]);
   const fileByRelativePath = new Map(
     files.map((file) => [file.relativePath, file]),
@@ -73,7 +111,7 @@ async function listPublishedAndroidApks() {
   const listedFilePaths = new Set();
 
   const releaseItems = releases.map((release) => {
-    const relativePath = relativeApkPathFromUrl(release.downloadUrl);
+    const relativePath = relativeApkPathFromUrl(release.downloadUrl, downloadBaseUrl);
     const file = relativePath ? fileByRelativePath.get(relativePath) : null;
     if (relativePath) {
       listedFilePaths.add(relativePath);
@@ -86,7 +124,7 @@ async function listPublishedAndroidApks() {
       environment: release.environment,
       status: release.status,
       available: release.status === 'active',
-      fileName: file?.fileName || fileNameFromUrl(release.downloadUrl),
+      fileName: file?.fileName || fileNameFromUrl(release.downloadUrl, fallbackFileName),
       source: 'manifest',
       modifiedAt: file?.modifiedAt || null,
     };
@@ -103,7 +141,7 @@ async function listPublishedAndroidApks() {
       versionCode: null,
       title: file.fileName,
       releaseNotes: [],
-      downloadUrl: downloadUrlForRelativePath(file.relativePath),
+      downloadUrl: downloadUrlForRelativePath(file.relativePath, downloadBaseUrl),
       fileSizeBytes: file.fileSizeBytes,
       sha256: null,
       publishedAt: file.modifiedAt,
@@ -122,7 +160,14 @@ async function loadReleaseManifests({ platform = 'android' } = {}) {
     throw validationError('UNSUPPORTED_PLATFORM', 'platform must be android');
   }
 
-  const manifestDir = path.dirname(defaultManifestPath());
+  return loadReleaseManifestsFromPath({
+    manifestPath: defaultManifestPath(),
+    platform,
+  });
+}
+
+async function loadReleaseManifestsFromPath({ manifestPath, platform = 'android' }) {
+  const manifestDir = path.dirname(manifestPath);
   let names;
   try {
     names = await fs.readdir(manifestDir);
@@ -262,10 +307,11 @@ async function listApkFiles(rootDir) {
   return walk(rootDir);
 }
 
-function relativeApkPathFromUrl(downloadUrl) {
+function relativeApkPathFromUrl(downloadUrl, downloadBaseUrl = defaultAndroidDownloadBaseUrl()) {
   try {
     const url = new URL(downloadUrl);
-    const marker = '/downloads/android/';
+    const baseUrl = new URL(downloadBaseUrl);
+    const marker = `${baseUrl.pathname.replace(/\/+$/, '')}/`;
     const index = url.pathname.indexOf(marker);
     if (index < 0) {
       return null;
@@ -276,21 +322,21 @@ function relativeApkPathFromUrl(downloadUrl) {
   }
 }
 
-function fileNameFromUrl(downloadUrl) {
+function fileNameFromUrl(downloadUrl, fallbackFileName = 'DoorSix.apk') {
   try {
     const url = new URL(downloadUrl);
     return decodeURIComponent(path.posix.basename(url.pathname));
   } catch (_) {
-    return 'DoorSix.apk';
+    return fallbackFileName;
   }
 }
 
-function downloadUrlForRelativePath(relativePath) {
+function downloadUrlForRelativePath(relativePath, downloadBaseUrl = defaultAndroidDownloadBaseUrl()) {
   const encodedPath = relativePath
     .split('/')
     .map((part) => encodeURIComponent(part))
     .join('/');
-  return `${defaultAndroidDownloadBaseUrl().replace(/\/+$/, '')}/${encodedPath}`;
+  return `${downloadBaseUrl.replace(/\/+$/, '')}/${encodedPath}`;
 }
 
 function compareReleaseItems(left, right) {
@@ -363,6 +409,7 @@ module.exports = {
   defaultManifestPath,
   isRolloutMatched,
   listPublishedAndroidApks,
+  listPublishedWordSnapAndroidApks,
   loadLatestRelease,
   loadReleaseByVersionCode,
   loadReleaseManifests,

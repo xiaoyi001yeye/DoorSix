@@ -20,6 +20,10 @@ const GAME_SETTINGS = require('../config/game_settings.json');
 const WEB_PLAY_DIR = path.join(__dirname, '..', 'public', 'play');
 const APP_RELEASE_ANDROID_DIR = process.env.APP_RELEASE_ANDROID_DIR ||
   '/opt/doorsix/releases/android';
+const WORDSNAP_RELEASE_ANDROID_DIR = process.env.WORDSNAP_RELEASE_ANDROID_DIR ||
+  '/opt/wordsnap/releases/android';
+const WORDSNAP_RELEASE_MANIFEST_DIR = process.env.WORDSNAP_RELEASE_MANIFEST_DIR ||
+  '/opt/wordsnap/releases/manifests';
 
 const RULE_SET_ID = 'zha_liujia_tianjin_basic_v1';
 const MAX_PLAYERS = 6;
@@ -939,11 +943,19 @@ app.get(/^\/play(?:\/.*)?$/, (_req, res) => {
 app.get(['/downloads/android', '/downloads/android/'], async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   try {
-    const releases = await appUpdates.listPublishedAndroidApks();
-    res.type('html').send(renderAndroidDownloadsPage(releases));
+    const [doorSixReleases, wordSnapReleases] = await Promise.all([
+      appUpdates.listPublishedAndroidApks(),
+      appUpdates.listPublishedWordSnapAndroidApks(),
+    ]);
+    res.type('html').send(renderAndroidDownloadsPage({
+      doorSixReleases,
+      wordSnapReleases,
+    }));
   } catch (error) {
     console.error('[app-update] downloads page failed', error);
-    res.status(500).type('html').send(renderAndroidDownloadsPage([], {
+    res.status(500).type('html').send(renderAndroidDownloadsPage({
+      doorSixReleases: [],
+      wordSnapReleases: [],
       error: 'APK 列表暂时不可用，请稍后再试。',
     }));
   }
@@ -953,6 +965,22 @@ app.use('/downloads/android', express.static(APP_RELEASE_ANDROID_DIR, {
   immutable: true,
   maxAge: '7d',
   setHeaders(res) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  },
+}));
+app.use('/downloads/wordsnap/android', express.static(WORDSNAP_RELEASE_ANDROID_DIR, {
+  fallthrough: false,
+  immutable: true,
+  maxAge: '7d',
+  setHeaders(res) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  },
+}));
+app.use('/downloads/wordsnap/manifests', express.static(WORDSNAP_RELEASE_MANIFEST_DIR, {
+  fallthrough: false,
+  maxAge: '1m',
+  setHeaders(res) {
+    res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Content-Type-Options', 'nosniff');
   },
 }));
@@ -1070,45 +1098,26 @@ app.get('/api/v1/app-updates/releases/:platform/:versionCode', async (req, res) 
   }
 });
 
-function renderAndroidDownloadsPage(releases, options = {}) {
-  const rows = releases.map((release) => {
-    const title = release.versionName
-      ? `DoorSix ${release.versionName}+${release.versionCode}`
-      : release.fileName;
-    const status = release.status === 'active'
-      ? '可下载'
-      : release.status === 'file'
-        ? '文件'
-        : release.status;
-    const notes = release.releaseNotes?.length
-      ? `<ul>${release.releaseNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>`
-      : '<span class="muted">暂无发布说明</span>';
-    return `
-      <article class="release">
-        <div class="release-main">
-          <div>
-            <h2>${escapeHtml(title)}</h2>
-            <p>${escapeHtml(release.fileName || 'DoorSix.apk')}</p>
-          </div>
-          <span class="status">${escapeHtml(status)}</span>
-        </div>
-        <dl>
-          <div><dt>大小</dt><dd>${formatBytes(release.fileSizeBytes)}</dd></div>
-          <div><dt>发布时间</dt><dd>${formatDateTime(release.publishedAt || release.modifiedAt)}</dd></div>
-          ${release.sha256 ? `<div><dt>SHA-256</dt><dd><code>${escapeHtml(release.sha256)}</code></dd></div>` : ''}
-        </dl>
-        <div class="notes">${notes}</div>
-        <a class="download" href="${escapeAttribute(release.downloadUrl)}">下载 APK</a>
-      </article>
-    `;
-  }).join('');
+function renderAndroidDownloadsPage({
+  doorSixReleases = [],
+  wordSnapReleases = [],
+  error = '',
+} = {}) {
+  const doorSixRows = renderAndroidReleaseRows(doorSixReleases, {
+    appName: 'DoorSix',
+    fallbackFileName: 'DoorSix.apk',
+  });
+  const wordSnapRows = renderAndroidReleaseRows(wordSnapReleases, {
+    appName: 'WordSnap',
+    fallbackFileName: 'WordSnap.apk',
+  });
 
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DoorSix APK 下载</title>
+  <title>Android APK 下载</title>
   <style>
     :root {
       color-scheme: dark;
@@ -1129,7 +1138,7 @@ function renderAndroidDownloadsPage(releases, options = {}) {
       color: var(--text);
     }
     main {
-      width: min(880px, 100%);
+      width: min(920px, 100%);
       margin: 0 auto;
       padding: 28px 16px 44px;
     }
@@ -1146,6 +1155,35 @@ function renderAndroidDownloadsPage(releases, options = {}) {
       color: var(--muted);
       line-height: 1.5;
       font-weight: 700;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin: 20px 0 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .tab-link {
+      display: inline-flex;
+      min-height: 42px;
+      align-items: center;
+      border: 1px solid transparent;
+      border-bottom: 0;
+      border-radius: 8px 8px 0 0;
+      padding: 0 16px;
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 900;
+    }
+    .tab-link.active {
+      color: var(--text);
+      background: var(--panel);
+      border-color: var(--line);
+    }
+    .tab-panel {
+      display: none;
+    }
+    .tab-panel.active {
+      display: block;
     }
     .error {
       margin: 16px 0;
@@ -1244,14 +1282,79 @@ function renderAndroidDownloadsPage(releases, options = {}) {
 <body>
   <main>
     <header>
-      <h1>DoorSix APK 下载</h1>
+      <h1>Android APK 下载</h1>
       <p>这里列出服务器上已经发布的 Android 安装包。</p>
     </header>
-    ${options.error ? `<div class="error">${escapeHtml(options.error)}</div>` : ''}
-    ${rows || '<div class="empty">暂无可下载 APK。</div>'}
+    ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
+    <nav class="tabs" aria-label="应用下载">
+      <a class="tab-link active" href="#doorsix">DoorSix</a>
+      <a class="tab-link" href="#wordsnap">WordSnap</a>
+    </nav>
+    <section id="doorsix" class="tab-panel active">
+      ${doorSixRows || '<div class="empty">暂无可下载 APK。</div>'}
+    </section>
+    <section id="wordsnap" class="tab-panel">
+      ${wordSnapRows || '<div class="empty">暂无可下载 APK。</div>'}
+    </section>
   </main>
+  <script>
+    const links = Array.from(document.querySelectorAll('.tab-link'));
+    const panels = Array.from(document.querySelectorAll('.tab-panel'));
+    function activate(hash) {
+      const target = hash === '#wordsnap' ? 'wordsnap' : 'doorsix';
+      links.forEach((link) => {
+        link.classList.toggle('active', link.getAttribute('href') === '#' + target);
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle('active', panel.id === target);
+      });
+    }
+    links.forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const hash = link.getAttribute('href');
+        history.replaceState(null, '', hash);
+        activate(hash);
+      });
+    });
+    activate(location.hash);
+  </script>
 </body>
 </html>`;
+}
+
+function renderAndroidReleaseRows(releases, { appName, fallbackFileName }) {
+  return releases.map((release) => {
+    const title = release.versionName
+      ? `${appName} ${release.versionName}+${release.versionCode}`
+      : release.fileName;
+    const status = release.status === 'active'
+      ? '可下载'
+      : release.status === 'file'
+        ? '文件'
+        : release.status;
+    const notes = release.releaseNotes?.length
+      ? `<ul>${release.releaseNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>`
+      : '<span class="muted">暂无发布说明</span>';
+    return `
+      <article class="release">
+        <div class="release-main">
+          <div>
+            <h2>${escapeHtml(title)}</h2>
+            <p>${escapeHtml(release.fileName || fallbackFileName)}</p>
+          </div>
+          <span class="status">${escapeHtml(status)}</span>
+        </div>
+        <dl>
+          <div><dt>大小</dt><dd>${formatBytes(release.fileSizeBytes)}</dd></div>
+          <div><dt>发布时间</dt><dd>${formatDateTime(release.publishedAt || release.modifiedAt)}</dd></div>
+          ${release.sha256 ? `<div><dt>SHA-256</dt><dd><code>${escapeHtml(release.sha256)}</code></dd></div>` : ''}
+        </dl>
+        <div class="notes">${notes}</div>
+        <a class="download" href="${escapeAttribute(release.downloadUrl)}">下载 APK</a>
+      </article>
+    `;
+  }).join('');
 }
 
 function escapeHtml(value) {
